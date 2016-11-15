@@ -71,6 +71,7 @@ class YarnChild {
   public static void main(String[] args) throws Throwable {
     Thread.setDefaultUncaughtExceptionHandler(new YarnUncaughtExceptionHandler());
     LOG.debug("Child starting");
+    long startTime = System.currentTimeMillis();
 
     final JobConf job = new JobConf(MRJobConfig.JOB_CONF_FILE);
     // Initing with our JobConf allows us to avoid loading confs twice
@@ -155,6 +156,7 @@ class YarnChild {
 
       // Create a final reference to the task for the doAs block
       final Task taskFinal = task;
+      LOG.info("frankfzw: " + task.getJobID() + ":" + task.getTaskID() + "initialized in " + (System.currentTimeMillis() - startTime) + "ms");
       childUGI.doAs(new PrivilegedExceptionAction<Object>() {
         @Override
         public Object run() throws Exception {

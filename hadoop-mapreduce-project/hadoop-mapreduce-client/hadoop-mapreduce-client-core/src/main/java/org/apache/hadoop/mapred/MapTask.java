@@ -336,7 +336,6 @@ public class MapTask extends Task {
       runTaskCleanupTask(umbilical, reporter);
       return;
     }
-
     if (useNewApi) {
       runNewMapper(job, splitMetaInfo, umbilical, reporter);
     } else {
@@ -769,7 +768,7 @@ public class MapTask extends Task {
     } else {
       output = new NewOutputCollector(taskContext, job, umbilical, reporter);
     }
-
+    LOG.info("frankfzw: The ouput class is " + output.getClass().toString());
     org.apache.hadoop.mapreduce.MapContext<INKEY, INVALUE, OUTKEY, OUTVALUE> 
     mapContext = 
       new MapContextImpl<INKEY, INVALUE, OUTKEY, OUTVALUE>(job, getTaskID(), 
@@ -783,9 +782,11 @@ public class MapTask extends Task {
               mapContext);
 
     try {
+      long startTime = System.currentTimeMillis();
       input.initialize(split, mapperContext);
       mapper.run(mapperContext);
       mapPhase.complete();
+      LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " compute finished in " + (System.currentTimeMillis() - startTime) + "ms");
       setPhase(TaskStatus.Phase.SORT);
       statusUpdate(umbilical);
       input.close();
@@ -1458,6 +1459,7 @@ public class MapTask extends Task {
     public void flush() throws IOException, ClassNotFoundException,
            InterruptedException {
       LOG.info("Starting flush of map output");
+      long startTime = System.currentTimeMillis();
       if (kvbuffer == null) {
         LOG.info("kvbuffer is null. Skipping flush.");
         return;
@@ -1508,9 +1510,11 @@ public class MapTask extends Task {
       }
       // release sort buffer before the merge
       kvbuffer = null;
-      mergeParts();
+      long size = mergeParts();
       Path outputPath = mapOutputFile.getOutputFile();
       fileOutputByteCounter.increment(rfs.getFileStatus(outputPath).getLen());
+      LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " shuffle write finished in " + (System.currentTimeMillis() - startTime) +
+              "ms with size: " + size);
     }
 
     public void close() { }
@@ -1801,7 +1805,7 @@ public class MapTask extends Task {
       public void close() { }
     }
 
-    private void mergeParts() throws IOException, InterruptedException, 
+    private long mergeParts() throws IOException, InterruptedException,
                                      ClassNotFoundException {
       // get the approximate size of the final output/index files
       long finalOutFileSize = 0;
@@ -1824,7 +1828,7 @@ public class MapTask extends Task {
             mapOutputFile.getOutputIndexFileForWriteInVolume(filename[0]), job);
         }
         sortPhase.complete();
-        return;
+        return finalOutFileSize;
       }
 
       // read in paged indices
@@ -1866,7 +1870,7 @@ public class MapTask extends Task {
           finalOut.close();
         }
         sortPhase.complete();
-        return;
+        return finalOutFileSize;
       }
       {
         sortPhase.addPhases(partitions); // Divide sort phase into sub-phases
@@ -1935,6 +1939,7 @@ public class MapTask extends Task {
           rfs.delete(filename[i],true);
         }
       }
+      return finalOutFileSize;
     }
     
     /**

@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.examples;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.StringTokenizer;
 
@@ -72,7 +73,10 @@ public class WordCount {
       System.err.println("Usage: wordcount <in> [<in>...] <out>");
       System.exit(2);
     }
+    conf.setInt("mapreduce.job.maps", 10);
+    conf.setInt("mapreduce.job.reduces", 1);
     Job job = Job.getInstance(conf, "word count");
+    // FileInputFormat.setMaxInputSplitSize(job, 88000);
     job.setJarByClass(WordCount.class);
     job.setMapperClass(TokenizerMapper.class);
     job.setCombinerClass(IntSumReducer.class);
