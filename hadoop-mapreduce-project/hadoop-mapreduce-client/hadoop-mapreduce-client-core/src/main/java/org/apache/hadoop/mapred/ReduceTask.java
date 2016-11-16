@@ -56,6 +56,7 @@ import org.apache.hadoop.mapreduce.task.reduce.Shuffle;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.yarn.util.SystemClock;
 
 /** A Reduce task. */
 @InterfaceAudience.Private
@@ -319,12 +320,14 @@ public class ReduceTask extends Task {
   public void run(JobConf job, final TaskUmbilicalProtocol umbilical)
     throws IOException, InterruptedException, ClassNotFoundException {
     job.setBoolean(JobContext.SKIP_RECORDS, isSkipping());
-
+    long startTime = System.currentTimeMillis();
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " reduce starts on " + startTime);
     if (isMapOrReduce()) {
       copyPhase = getProgress().addPhase("copy");
       sortPhase  = getProgress().addPhase("sort");
       reducePhase = getProgress().addPhase("reduce");
     }
+
     // start thread that will handle communication with parent
     TaskReporter reporter = startReporter(umbilical);
     
@@ -360,6 +363,9 @@ public class ReduceTask extends Task {
 					
     shuffleConsumerPlugin = ReflectionUtils.newInstance(clazz, job);
     LOG.info("Using ShuffleConsumerPlugin: " + shuffleConsumerPlugin);
+    long shuffleStartTime = System.currentTimeMillis();
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " shuffle starts on " +
+            shuffleStartTime);
 
     ShuffleConsumerPlugin.Context shuffleContext = 
       new ShuffleConsumerPlugin.Context(getTaskID(), job, FileSystem.getLocal(job), umbilical, 
@@ -374,6 +380,8 @@ public class ReduceTask extends Task {
     shuffleConsumerPlugin.init(shuffleContext);
 
     rIter = shuffleConsumerPlugin.run();
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " shuffle fetch finished in " +
+            (System.currentTimeMillis() - shuffleStartTime));
 
     // free up the data structures
     mapOutputFilesOnDisk.clear();
@@ -384,6 +392,9 @@ public class ReduceTask extends Task {
     Class keyClass = job.getMapOutputKeyClass();
     Class valueClass = job.getMapOutputValueClass();
     RawComparator comparator = job.getOutputValueGroupingComparator();
+    long computeStartTime = System.currentTimeMillis();
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " reduce compute starts on " +
+            computeStartTime);
 
     if (useNewApi) {
       runNewReducer(job, umbilical, reporter, rIter, comparator, 
@@ -392,9 +403,14 @@ public class ReduceTask extends Task {
       runOldReducer(job, umbilical, reporter, rIter, comparator, 
                     keyClass, valueClass);
     }
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " reduce compute finished in " +
+            (System.currentTimeMillis() - computeStartTime) + " ms");
 
     shuffleConsumerPlugin.close();
     done(umbilical, reporter);
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " reduce finished in " +
+            (System.currentTimeMillis() - startTime) + " ms");
+
   }
 
   @SuppressWarnings("unchecked")

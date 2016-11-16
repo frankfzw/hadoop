@@ -156,7 +156,8 @@ class YarnChild {
 
       // Create a final reference to the task for the doAs block
       final Task taskFinal = task;
-      LOG.info("frankfzw: " + task.getJobID() + ":" + task.getTaskID() + "initialized in " + (System.currentTimeMillis() - startTime) + "ms");
+      LOG.info("frankfzw: " + "isMap: " + task.isMapTask() + " " + task.getJobID() + ":" + task.getTaskID()+ " initialized in "
+              + (System.currentTimeMillis() - startTime) + " ms");
       childUGI.doAs(new PrivilegedExceptionAction<Object>() {
         @Override
         public Object run() throws Exception {
