@@ -344,8 +344,8 @@ public class MapTask extends Task {
       runOldMapper(job, splitMetaInfo, umbilical, reporter);
     }
     done(umbilical, reporter);
-    LOG.info("frankfzw:" + getJobID() + ":" + getTaskID() + " map finished in " +
-            (System.currentTimeMillis() - startTime) + "ms");
+    LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " map finished in " +
+            (System.currentTimeMillis() - startTime) + " ms");
 
   }
 
@@ -792,7 +792,7 @@ public class MapTask extends Task {
       input.initialize(split, mapperContext);
       mapper.run(mapperContext);
       mapPhase.complete();
-      LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " map compute finished in " + (System.currentTimeMillis() - startTime) + "ms");
+      LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " map compute finished in " + (System.currentTimeMillis() - startTime) + " ms");
       setPhase(TaskStatus.Phase.SORT);
       statusUpdate(umbilical);
       input.close();
@@ -1464,7 +1464,7 @@ public class MapTask extends Task {
 
     public void flush() throws IOException, ClassNotFoundException,
            InterruptedException {
-      LOG.info("Starting flush of map output");
+      LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " starts flush of map output on " + System.currentTimeMillis());
       long startTime = System.currentTimeMillis();
       if (kvbuffer == null) {
         LOG.info("kvbuffer is null. Skipping flush.");
@@ -1520,7 +1520,7 @@ public class MapTask extends Task {
       Path outputPath = mapOutputFile.getOutputFile();
       fileOutputByteCounter.increment(rfs.getFileStatus(outputPath).getLen());
       LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " shuffle write finished in " + (System.currentTimeMillis() - startTime) +
-              "ms with size: " + size);
+              " ms with size: " + size);
     }
 
     public void close() { }

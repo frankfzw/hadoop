@@ -1,11 +1,16 @@
 #!/usr/bin/python
 
 import sys, getopt
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 jobIdToMap = {}
 jobIdToReduce = {}
 taskIdToData = {}
+
+mapPropertiesNum = 8
+reducePropertiesNum = 8
 
 
 def parse_file(inputfile):
@@ -38,6 +43,12 @@ def parse_file(inputfile):
         elif 'ReduceTask' in line:
             array = target.split()
             ids = array[1].split(':')
+            taskIdToData['reduce start ts'] = 0
+            taskIdToData['shuffle start ts'] = 0
+            taskIdToData['fetch'] = 0
+            taskIdToData['reduce compute start ts'] = 0
+            taskIdToData['reduce compute interval'] = 0
+            taskIdToData['reduce interval'] = 0
             if 'reduce starts' in target:
                 taskIdToData[ids[1]]['reduce start ts'] = array[5]
             elif 'shuffle starts' in target:
@@ -50,7 +61,66 @@ def parse_file(inputfile):
                 taskIdToData[ids[1]]['reduce compute interval'] = array[6]
             else:
                 taskIdToData[ids[1]]['reduce interval'] = array[5]
+        
+        #deal with map task
+        elif 'MapTask' in line:
+            array = target.split()
+            ids = array[1].split(':')
+            taskIdToData['map starts ts'] = 0
+            taskIdToData['shuffle start ts'] = 0
+            taskIdToData['shuffle write'] = 0
+            taskIdToData['shuffle size'] = 0
+            taskIdToData['map compute start ts'] = 0
+            taskIdToData['map compute interval'] = 0
+            taskIdToData['map interval'] = 0
+            if 'map starts' in target:
+                taskIdToData[ids[1]]['map start ts'] = array[5]
+            elif 'flush' in target:
+                taskIdToData[ids[1]]['shuffle start ts'] = array[8]
+            elif 'shuffle write' in target:
+                taskIdToData[ids[1]]['shuffle write'] = array[6]
+                taskIdToData[ids[1]]['shuffle size'] = array[10]
+            elif 'map compute starts' in target:
+                taskIdToData[ids[1]]['map compute start ts'] = array[6]
+            elif 'map compute finished' in target:
+                taskIdToData[ids[1]]['map compute interval'] = array[6]
+            elif 'map finished' in target:
+                taskIdToData[ids[1]]['map interval'] = array[5]
 
+
+def plot():
+    plt.rcdefaults()
+    for jobId in jobIdToMap:
+        mapTaskId = jobIdToMap[jobId]
+        reduceTaskId = jobIdToReduce[jobId]
+        y_pos = np.arange(len(mapTaskId) + len(reduceTaskId))
+        x_pos = np.zeros(len(y_pos))
+        
+        #print init time
+        width = np.asarray(map(lambda x:int(taskIdToData[x]['init']), mapTaskId))
+        width = np.append(width, np.zeros(len(reduceTaskId)))
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='blue')
+
+        #print map compute time
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        width = np.asarray(map(lambda x:int(taskIdToData[x]['map compute interval']), mapTaskId))
+        width = np.append(width, np.zeros(len(reduceTaskId)))
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='green')
+
+        #print shuffle wait
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        width = np.asarray(map(lambda x:int((taskIdToData[x]['shuffle start ts']-taskIdToData[x]['map start ts']-taskIdToData[x]['map compute interval'])), mapTaskId))
+        width = np.append(width, np.zeros(len(reduceTaskId)))
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='black')
+
+        #print shuffle write
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        width = np.asarray(map(lambda x:int(taskIdToData[x]['shuffle write']), mapTaskId))
+        width = np.append(width, np.zeros(len(reduceTaskId)))
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='red')
+
+        plt.yticks(y_pos, np.asarray(mapTaskId))
+        plt.show()
 
 
 
@@ -74,15 +144,16 @@ def main(argv):
     print 'Input file is ' + inputfile
 
     parse_file(inputfile)
+    plot()
 
-    for k in jobIdToMap:
-        print jobIdToMap[k]
-        
-    for k in jobIdToReduce:
-        print jobIdToReduce[k]
-    
-    for k in taskIdToData:
-        print taskIdToData[k]
+    # for k in jobIdToMap:
+    #     print jobIdToMap[k]
+    #     
+    # for k in jobIdToReduce:
+    #     print jobIdToReduce[k]
+    # 
+    # for k in taskIdToData:
+    #     print taskIdToData[k]
 
 
 if __name__ == "__main__":
