@@ -33,22 +33,31 @@ def parse_file(inputfile):
                     jobIdToMap[ids[0]].append(ids[1])
                 else:
                     jobIdToMap[ids[0]] = [ids[1]]
+                taskIdToData[ids[1]]['map starts ts'] = 0
+                taskIdToData[ids[1]]['shuffle start ts'] = 0
+                taskIdToData[ids[1]]['shuffle write'] = 0
+                taskIdToData[ids[1]]['shuffle size'] = 0
+                taskIdToData[ids[1]]['map compute start ts'] = 0
+                taskIdToData[ids[1]]['map compute interval'] = 0
+                taskIdToData[ids[1]]['map interval'] = 0
+
             else:
                 if ids[0] in jobIdToReduce:
                     jobIdToReduce[ids[0]].append(ids[1])
                 else:
                     jobIdToReduce[ids[0]] = [ids[1]]
+                taskIdToData[ids[1]]['reduce start ts'] = 0
+                taskIdToData[ids[1]]['shuffle start ts'] = 0
+                taskIdToData[ids[1]]['fetch'] = 0
+                taskIdToData[ids[1]]['reduce compute start ts'] = 0
+                taskIdToData[ids[1]]['reduce compute interval'] = 0
+                taskIdToData[ids[1]]['reduce interval'] = 0
+
 
         # deal with reduce task
         elif 'ReduceTask' in line:
             array = target.split()
             ids = array[1].split(':')
-            taskIdToData['reduce start ts'] = 0
-            taskIdToData['shuffle start ts'] = 0
-            taskIdToData['fetch'] = 0
-            taskIdToData['reduce compute start ts'] = 0
-            taskIdToData['reduce compute interval'] = 0
-            taskIdToData['reduce interval'] = 0
             if 'reduce starts' in target:
                 taskIdToData[ids[1]]['reduce start ts'] = array[5]
             elif 'shuffle starts' in target:
@@ -66,13 +75,6 @@ def parse_file(inputfile):
         elif 'MapTask' in line:
             array = target.split()
             ids = array[1].split(':')
-            taskIdToData['map starts ts'] = 0
-            taskIdToData['shuffle start ts'] = 0
-            taskIdToData['shuffle write'] = 0
-            taskIdToData['shuffle size'] = 0
-            taskIdToData['map compute start ts'] = 0
-            taskIdToData['map compute interval'] = 0
-            taskIdToData['map interval'] = 0
             if 'map starts' in target:
                 taskIdToData[ids[1]]['map start ts'] = array[5]
             elif 'flush' in target:
@@ -109,7 +111,8 @@ def plot():
 
         #print shuffle wait
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
-        width = np.asarray(map(lambda x:int((taskIdToData[x]['shuffle start ts']-taskIdToData[x]['map start ts']-taskIdToData[x]['map compute interval'])), mapTaskId))
+        width = np.asarray(map(lambda x:
+            (0 if (taskIdToData[x]['shuffle start ts'] == 0) else (int(taskIdToData[x]['shuffle start ts'])-int(taskIdToData[x]['map start ts'])-int(taskIdToData[x]['map compute interval']))), mapTaskId))
         width = np.append(width, np.zeros(len(reduceTaskId)))
         plt.barh(y_pos, width, height=0.5, left=x_pos, color='black')
 
@@ -119,7 +122,34 @@ def plot():
         width = np.append(width, np.zeros(len(reduceTaskId)))
         plt.barh(y_pos, width, height=0.5, left=x_pos, color='red')
 
+        #print reduce 
+        #make distance from reduce phase and map phase
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        maxMapTs = np.amax(x_pos)
+        x_pos = np.zeros(len(y_pos))
+        x_pos.fill(2000 + maxMapTs)
+        
+        #print reduce init time
+        width = np.asarray(map(lambda x:int(taskIdToData[x]['init']), reduceTaskId))
+        width = np.append(np.zeros(len(mapTaskId)), width)
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='blue')
+
+        #print shuffle read
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        width = np.asarray(map(lambda x:int(taskIdToData[x]['fetch']), reduceTaskId))
+        width = np.append(np.zeros(len(mapTaskId)), width)
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='yellow')
+
+        #print reduce compute
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        width = np.asarray(map(lambda x:int(taskIdToData[x]['reduce compute interval']), reduceTaskId))
+        width = np.append(np.zeros(len(mapTaskId)), width)
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='green')
+
+
+        mapTaskId.extend(reduceTaskId)
         plt.yticks(y_pos, np.asarray(mapTaskId))
+        print y_pos
         plt.show()
 
 
