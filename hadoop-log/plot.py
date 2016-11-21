@@ -101,26 +101,41 @@ def plot():
         #print init time
         width = np.asarray(map(lambda x:int(taskIdToData[x]['init']), mapTaskId))
         width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='blue')
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='////', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle='solid', linewidths='3')
 
         #print map compute time
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['map compute interval']), mapTaskId))
         width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='green')
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='....', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle=':', linewidths='3')
+
 
         #print shuffle wait
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:
             (0 if (taskIdToData[x]['shuffle start ts'] == 0) else (int(taskIdToData[x]['shuffle start ts'])-int(taskIdToData[x]['map start ts'])-int(taskIdToData[x]['map compute interval']))), mapTaskId))
         width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='black')
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='----', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle='--', linewidths='3')
+
 
         #print shuffle write
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['shuffle write']), mapTaskId))
         width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='red')
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='++++', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle='-.', linewidths='3')
+
 
         #print reduce 
         #make distance from reduce phase and map phase
@@ -132,20 +147,30 @@ def plot():
         #print reduce init time
         width = np.asarray(map(lambda x:int(taskIdToData[x]['init']), reduceTaskId))
         width = np.append(np.zeros(len(mapTaskId)), width)
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='blue')
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='////', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle='solid', linewidths='3')
+
 
         #print shuffle read
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['fetch']), reduceTaskId))
         width = np.append(np.zeros(len(mapTaskId)), width)
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='yellow')
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='xxxx', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle='-.', linewidths='3')
+
 
         #print reduce compute
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['reduce compute interval']), reduceTaskId))
         width = np.append(np.zeros(len(mapTaskId)), width)
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='green')
-
+        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='....', align='center')
+        # xmin = x_pos
+        # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        # plt.hlines(y_pos, xmin, xmax, linestyle=':', linewidths='3')
 
         mapTaskId.extend(reduceTaskId)
         plt.yticks(y_pos, np.asarray(mapTaskId))
