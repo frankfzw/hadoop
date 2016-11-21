@@ -95,13 +95,16 @@ def plot():
     for jobId in jobIdToMap:
         mapTaskId = jobIdToMap[jobId]
         reduceTaskId = jobIdToReduce[jobId]
-        y_pos = np.arange(len(mapTaskId) + len(reduceTaskId))
+        # y_pos = np.arange(len(mapTaskId) + len(reduceTaskId))
+        # x_pos = np.zeros(len(y_pos))
+
+        y_pos = np.arange(len(mapTaskId))
         x_pos = np.zeros(len(y_pos))
         
         #print init time
         width = np.asarray(map(lambda x:int(taskIdToData[x]['init']), mapTaskId))
-        width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='////', align='center')
+        # width = np.append(width, np.zeros(len(reduceTaskId)))
+        m_init = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='////', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle='solid', linewidths='3')
@@ -109,8 +112,8 @@ def plot():
         #print map compute time
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['map compute interval']), mapTaskId))
-        width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='....', align='center')
+        # width = np.append(width, np.zeros(len(reduceTaskId)))
+        m_compute = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='....', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle=':', linewidths='3')
@@ -120,8 +123,8 @@ def plot():
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:
             (0 if (taskIdToData[x]['shuffle start ts'] == 0) else (int(taskIdToData[x]['shuffle start ts'])-int(taskIdToData[x]['map start ts'])-int(taskIdToData[x]['map compute interval']))), mapTaskId))
-        width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='----', align='center')
+        # width = np.append(width, np.zeros(len(reduceTaskId)))
+        m_shuffle_wait = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='----', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle='--', linewidths='3')
@@ -130,8 +133,8 @@ def plot():
         #print shuffle write
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['shuffle write']), mapTaskId))
-        width = np.append(width, np.zeros(len(reduceTaskId)))
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='++++', align='center')
+        # width = np.append(width, np.zeros(len(reduceTaskId)))
+        m_shuffle_write = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='++++', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle='-.', linewidths='3')
@@ -139,15 +142,19 @@ def plot():
 
         #print reduce 
         #make distance from reduce phase and map phase
+        y_pos = np.arange(len(mapTaskId), len(mapTaskId) + len(reduceTaskId))
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         maxMapTs = np.amax(x_pos)
         x_pos = np.zeros(len(y_pos))
-        x_pos.fill(2000 + maxMapTs)
+        x_pos.fill(4000 + maxMapTs)
+        
+        #print a vline to divide
+        plt.plot([2000 + maxMapTs, 2000 + maxMapTs], [-0.5, len(mapTaskId) + len(reduceTaskId)], 'k--')
         
         #print reduce init time
         width = np.asarray(map(lambda x:int(taskIdToData[x]['init']), reduceTaskId))
-        width = np.append(np.zeros(len(mapTaskId)), width)
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='////', align='center')
+        # width = np.append(np.zeros(len(mapTaskId)), width)
+        r_init = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='////', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle='solid', linewidths='3')
@@ -156,8 +163,8 @@ def plot():
         #print shuffle read
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['fetch']), reduceTaskId))
-        width = np.append(np.zeros(len(mapTaskId)), width)
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='xxxx', align='center')
+        # width = np.append(np.zeros(len(mapTaskId)), width)
+        r_shuffle_read = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='xxxx', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle='-.', linewidths='3')
@@ -166,15 +173,21 @@ def plot():
         #print reduce compute
         x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         width = np.asarray(map(lambda x:int(taskIdToData[x]['reduce compute interval']), reduceTaskId))
-        width = np.append(np.zeros(len(mapTaskId)), width)
-        plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='....', align='center')
+        # width = np.append(np.zeros(len(mapTaskId)), width)
+        r_compute = plt.barh(y_pos, width, height=0.5, left=x_pos, color='none', hatch='....', align='center')
         # xmin = x_pos
         # xmax = np.asarray(map(lambda x, y:x+y, x_pos, width))
         # plt.hlines(y_pos, xmin, xmax, linestyle=':', linewidths='3')
 
+        #add legend
+        plt.legend((m_init[0], m_compute[0], m_shuffle_wait[0], m_shuffle_write[0], r_shuffle_read[0]), 
+                ('map/reduce init', 'map/reduce compute', 'map shuffle wait', 'map shuffle write', 'reduce shuffle read'), loc='lower right')
+
         mapTaskId.extend(reduceTaskId)
-        plt.yticks(y_pos, np.asarray(mapTaskId))
-        print y_pos
+        labels = map(lambda x:x.split('_', 3)[3], mapTaskId)
+        y_pos = np.arange(len(mapTaskId) + len(reduceTaskId))
+        plt.yticks(y_pos, np.asarray(labels))
+        plt.ylim(-0.5, (len(y_pos)-1.5))
         plt.show()
 
 
