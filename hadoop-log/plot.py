@@ -285,7 +285,6 @@ def plot_dens():
         #print reduce 
         #make distance from reduce phase and map phase
         y_pos = np.arange(len(mapTaskId)+1, len(mapTaskId)+len(reduceTaskId)+1)
-        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
         maxMapTs = np.amax(x_pos)
 
         x_pos = np.asarray(map(lambda x:taskIdToData[x]['reduce start ts']-min_map_start_ts, reduceTaskId))
