@@ -123,7 +123,10 @@ def plot():
     for jobId in jobIdToMap:
         mapTaskId = jobIdToMap[jobId]
         sort_ts(mapTaskId, 0, len(mapTaskId)-1, 'map start ts')
-        reduceTaskId = jobIdToReduce[jobId]
+
+        reduceTaskId = []
+        if jobId in jobIdToReduce:
+            reduceTaskId = jobIdToReduce[jobId]
         sort_ts(reduceTaskId, 0, len(reduceTaskId)-1, 'reduce start ts')
         # y_pos = np.arange(len(mapTaskId) + len(reduceTaskId))
         # x_pos = np.zeros(len(y_pos))
@@ -216,8 +219,12 @@ def plot():
         plt.plot([xmin, xmax], [len(mapTaskId), len(mapTaskId)], 'k--')
 
         #add legend
-        plt.legend((m_init[0], m_compute[0], m_shuffle_wait[0], m_shuffle_write[0], r_shuffle_read[0]), 
-                ('map/reduce init', 'map/reduce compute', 'map shuffle wait', 'map shuffle write', 'reduce shuffle read'), loc='lower right')
+        if len(reduceTaskId) == 0:
+            plt.legend((m_init[0], m_compute[0], m_shuffle_wait[0], m_shuffle_write[0]), 
+                ('map/reduce init', 'map/reduce compute', 'map shuffle wait', 'map shuffle write'), loc='lower right')
+        else:
+            plt.legend((m_init[0], m_compute[0], m_shuffle_wait[0], m_shuffle_write[0], r_shuffle_read[0]), 
+                    ('map/reduce init', 'map/reduce compute', 'map shuffle wait', 'map shuffle write', 'reduce shuffle read'), loc='lower right')
 
         map_task_id_len = len(mapTaskId)
         mapTaskId.extend(reduceTaskId)
@@ -226,6 +233,100 @@ def plot():
         y_pos = np.arange(len(mapTaskId)+len(reduceTaskId)+1)
         plt.yticks(y_pos, np.asarray(labels))
         plt.ylim(-0.5, (len(y_pos)-1.5))
+        plt.show()
+
+
+def plot_dens():
+    plt.rcdefaults()
+    for jobId in jobIdToMap:
+        mapTaskId = jobIdToMap[jobId]
+        sort_ts(mapTaskId, 0, len(mapTaskId)-1, 'map start ts')
+
+        reduceTaskId = []
+        if jobId in jobIdToReduce:
+            reduceTaskId = jobIdToReduce[jobId]
+        sort_ts(reduceTaskId, 0, len(reduceTaskId)-1, 'reduce start ts')
+        # y_pos = np.arange(len(mapTaskId) + len(reduceTaskId))
+        # x_pos = np.zeros(len(y_pos))
+        map_start_ts = np.asarray(map(lambda x:taskIdToData[x]['map start ts'], mapTaskId))
+        min_map_start_ts = np.amin(map_start_ts)
+
+        y_pos = np.arange(len(mapTaskId))
+        x_pos = np.asarray(map(lambda x:x-min_map_start_ts, map_start_ts))
+        
+        #print init time
+        width = np.asarray(map(lambda x:taskIdToData[x]['init'], mapTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        m_init = plt.hlines(y_pos, xmin, x_pos, linestyle=':', linewidths='3')
+
+        #print map compute time
+        width = np.asarray(map(lambda x:taskIdToData[x]['map compute interval'], mapTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        m_compute = plt.hlines(y_pos, xmin, x_pos, linestyle=':', linewidths='3')
+
+
+        #print shuffle wait
+        width = np.asarray(map(lambda x:
+            (0 if (taskIdToData[x]['shuffle start ts'] == 0) else (taskIdToData[x]['shuffle start ts']-taskIdToData[x]['map start ts']-taskIdToData[x]['map compute interval'])), mapTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        m_shuffle_wait = plt.hlines(y_pos, xmin, x_pos, linestyle=':', linewidths='3')
+
+
+        #print shuffle write
+        width = np.asarray(map(lambda x:taskIdToData[x]['shuffle write'], mapTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        m_shuffle_write = plt.hlines(y_pos, xmin, x_pos, linestyle='-', linewidths='3')
+
+
+        #print reduce 
+        #make distance from reduce phase and map phase
+        y_pos = np.arange(len(mapTaskId)+1, len(mapTaskId)+len(reduceTaskId)+1)
+        x_pos = np.asarray(map(lambda x,y:x+y, x_pos, width))
+        maxMapTs = np.amax(x_pos)
+
+        x_pos = np.asarray(map(lambda x:taskIdToData[x]['reduce start ts']-min_map_start_ts, reduceTaskId))
+        
+        #print vline to seperate map and reduce
+        plt.plot([10 + maxMapTs, 10 + maxMapTs], [-0.5, len(mapTaskId) + len(reduceTaskId)], 'k--')
+        
+        #print reduce init time
+        width = np.asarray(map(lambda x:taskIdToData[x]['init'], reduceTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        r_init = plt.hlines(y_pos, xmin, x_pos, linestyle=':', linewidths='3')
+
+
+        #print shuffle read
+        width = np.asarray(map(lambda x:taskIdToData[x]['fetch'], reduceTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        r_shuffle_read = plt.hlines(y_pos, xmin, x_pos, linestyle='--', linewidths='3')
+
+
+        #print reduce compute
+        width = np.asarray(map(lambda x:taskIdToData[x]['reduce compute interval'], reduceTaskId))
+        xmin = x_pos
+        x_pos = np.asarray(map(lambda x, y:x+y, x_pos, width))
+        r_compute = plt.hlines(y_pos, xmin, x_pos, linestyle=':', linewidths='3')
+
+        #print hline to speprate map and reduce
+        xmin, xmax = plt.xlim()
+        plt.plot([xmin, xmax], [len(mapTaskId), len(mapTaskId)], 'k--')
+
+        #add legend
+        if len(reduceTaskId) == 0:
+            plt.legend((m_init, m_shuffle_write), 
+                ('computing', 'map shuffle write'), loc='lower right')
+        else:
+            plt.legend((m_init, m_shuffle_write, r_shuffle_read),
+                    ('computing', 'map shuffle write', 'reduce shuffle read'), loc='lower right')
+
+        y_max = len(mapTaskId) + len(reduceTaskId) + 1
+        plt.ylim(-0.5, (y_max-1.5))
         plt.show()
 
 
@@ -250,7 +351,11 @@ def main(argv):
     print 'Input file is ' + inputfile
 
     parse_file(inputfile)
-    plot()
+    print 'number of tasks: {}'.format(len(taskIdToData))
+    if len(taskIdToData) > 25:
+        plot_dens()
+    else:
+        plot()
 
     # for k in jobIdToMap:
     #     print jobIdToMap[k]
