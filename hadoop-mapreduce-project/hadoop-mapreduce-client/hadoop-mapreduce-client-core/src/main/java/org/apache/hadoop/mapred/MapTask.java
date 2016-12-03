@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -64,9 +65,12 @@ import org.apache.hadoop.mapreduce.TaskType;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormatCounter;
 import org.apache.hadoop.mapreduce.lib.map.WrappedMapper;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormatCounter;
+import org.apache.hadoop.mapreduce.scache.ScacheKVIterator;
+import org.apache.hadoop.mapreduce.scache.ScacheMetaBuffer;
 import org.apache.hadoop.mapreduce.split.JobSplit.TaskSplitIndex;
 import org.apache.hadoop.mapreduce.task.MapContextImpl;
 import org.apache.hadoop.mapreduce.CryptoUtils;
+import org.apache.hadoop.mapreduce.scache.ScacheDaemon;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.Progress;
@@ -876,6 +880,151 @@ public class MapTask extends Task {
       }
       return bytesWritten;
     }
+  }
+
+  @InterfaceAudience.LimitedPrivate({"MapReduce"})
+  @InterfaceStability.Unstable
+  public static class ScacheOutputBuffer<K extends Object, V extends Object>
+      implements MapOutputCollector<K, V>{
+    private int partitions;
+    private JobConf job;
+    private TaskReporter reporter;
+    private Class<K> keyClass;
+    private Class<V> valClass;
+    private RawComparator<K> comparator;
+    private SerializationFactory serializationFactory;
+    private Serializer<K> keySerializer;
+    private Serializer<V> valSerializer;
+    private CombinerRunner<K, V> combinerRunner;
+    private CombineOutputCollector<K, V> combineCollector;
+    private MapTask mapTask;
+    private Progress sortPhase;
+    private IndexedSorter sorter;
+
+    // some static number
+    private static final int VALSTART = 2;         // val offset in acct
+    private static final int KEYSTART = 0;         // key offset in acct
+    private static final int KEYLEN = 1;
+    private static final int VALLEN = 3;           // length of value
+    private static final int NMETA = 4;            // num meta ints
+
+    // Compression for map-outputs
+    private CompressionCodec codec;
+
+    // Counter
+    private Counters.Counter mapOutputByteCounter;
+    private Counters.Counter mapOutputRecordCounter;
+
+    // Buffer
+    private DataOutputStream[] buffers;
+    private ByteArrayOutputStream[] rawBuffers;
+    private ArrayList<ScacheMetaBuffer> metas;
+
+    public void init(MapOutputCollector.Context context
+                    ) throws IOException, ClassNotFoundException {
+      job = context.getJobConf();
+      mapTask = context.getMapTask();
+      reporter = context.getReporter();
+      sortPhase = mapTask.getSortPhase();
+      partitions = job.getNumReduceTasks();
+
+      comparator = job.getOutputKeyComparator();
+      keyClass = (Class<K>)job.getMapOutputKeyClass();
+      valClass = (Class<V>)job.getReducerClass();
+      serializationFactory = new SerializationFactory(job);
+      keySerializer = serializationFactory.getSerializer(keyClass);
+      valSerializer = serializationFactory.getSerializer(valClass);
+      sorter = ReflectionUtils.newInstance(job.getClass("map.sort.class",
+            QuickSort.class, IndexedSorter.class), job);
+      mapOutputByteCounter = reporter.getCounter(TaskCounter.MAP_OUTPUT_BYTES);
+      mapOutputRecordCounter = reporter.getCounter(TaskCounter.MAP_OUTPUT_RECORDS);
+
+      // compression
+      if (job.getCompressMapOutput()) {
+        Class<? extends CompressionCodec> codecClass =
+                job.getMapOutputCompressorClass(DefaultCodec.class);
+        codec = ReflectionUtils.newInstance(codecClass, job);
+      } else {
+        codec = null;
+      }
+
+      // combiner
+      final Counters.Counter combineInputCounter =
+              reporter.getCounter(TaskCounter.COMBINE_INPUT_RECORDS);
+      combinerRunner = CombinerRunner.create(job, mapTask.getTaskID(),
+              combineInputCounter,
+              reporter, null);
+      if (combinerRunner != null) {
+        final Counters.Counter combineOutputCounter =
+                reporter.getCounter(TaskCounter.COMBINE_OUTPUT_RECORDS);
+        combineCollector= new CombineOutputCollector<K,V>(combineOutputCounter, reporter, job);
+      } else {
+        combineCollector = null;
+      }
+
+      // buffers
+      buffers = new DataOutputStream[partitions];
+      rawBuffers = new ByteArrayOutputStream[partitions];
+      for (int i = 0; i < partitions; i ++) {
+        rawBuffers[i] = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(rawBuffers[i]);
+        buffers[i] = dos;
+        metas.add(new ScacheMetaBuffer(comparator));
+      }
+
+    }
+    public synchronized void collect(K key, V value, final int partition
+                                     ) throws IOException {
+      reporter.progress();
+      if (key.getClass() != keyClass) {
+        throw new IOException("Type mismatch in key from map: expected "
+                              + keyClass.getName() + ", received "
+                              + key.getClass().getName());
+      }
+      if (value.getClass() != valClass) {
+        throw new IOException("Type mismatch in value from map: expected "
+                              + valClass.getName() + ", received "
+                              + value.getClass().getName());
+      }
+      if (partition < 0 || partition >= partitions) {
+        throw new IOException("Illegal partition for " + key + " (" +
+            partition + ")");
+      }
+      int keyStart = rawBuffers[partition].size();
+      keySerializer.open(buffers[partition]);
+      keySerializer.serialize(key);
+      int keyLen = rawBuffers[partition].size() - keyStart;
+      valSerializer.open(buffers[partition]);
+      valSerializer.serialize(value);
+      int valLen = rawBuffers[partition].size() - keyStart - keyLen;
+      //TODO add meta here
+      metas.get(partition).append(keyStart, keyLen, (keyStart + keyLen), valLen);
+      mapOutputRecordCounter.increment(1);
+      mapOutputByteCounter.increment((keyLen + valLen));
+
+    }
+    public void flush() throws IOException, ClassNotFoundException,
+           InterruptedException {
+      // sort and merge
+      for (int i = 0; i < partitions; i ++) {
+        byte[] bytes = rawBuffers[i].toByteArray();
+        metas.get(i).setRaw(bytes);
+        // sort this partition
+        sorter.sort(metas.get(i), 0, metas.get(i).getMetaSize());
+      }
+      sortPhase.complete();
+      for (int i = 0; i < partitions; i ++) {
+        ScacheKVIterator kvIter = new ScacheKVIterator(metas.get(i));
+        // combine here
+      }
+
+    }
+    public void close() throws IOException{
+      for (int i = 0; i < partitions; i ++) {
+        buffers[i].close();
+      }
+    }
+
   }
 
   @InterfaceAudience.LimitedPrivate({"MapReduce"})
