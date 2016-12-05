@@ -29,7 +29,7 @@ public class ScacheKVIterator implements RawKeyValueIterator {
         this.kvmeta = buf.getMeta();
         this.rawData = buf.getRaw();
         this.end = buf.getMetaSize();
-        current = 0;
+        current = -1;
     }
     public boolean next() throws IOException {
         return ++current < end;

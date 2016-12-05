@@ -1016,13 +1016,29 @@ public class MapTask extends Task {
       for (int i = 0; i < partitions; i ++) {
         ScacheKVIterator kvIter = new ScacheKVIterator(metas.get(i));
         // combine here
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(bos);
+        FSDataOutputStream fos = new FSDataOutputStream(dos, null);
+        FSDataOutputStream partitionOut = CryptoUtils.wrapIfNecessary(job, fos);
+        IFile.Writer<K, V> writer = new Writer<K, V>(job, partitionOut, keyClass, valClass, codec, null);
+        if (combinerRunner == null) {
+          while (kvIter.next()) {
+            writer.append(kvIter.getKey(), kvIter.getValue());
+          }
+        } else {
+          combineCollector.setWriter(writer);
+          combinerRunner.combine(kvIter, combineCollector);
+        }
+        // TODO send data to Scache
       }
 
     }
     public void close() throws IOException{
       for (int i = 0; i < partitions; i ++) {
         buffers[i].close();
+        rawBuffers[i].close();
       }
+      // TODO send map finish to Scache
     }
 
   }
