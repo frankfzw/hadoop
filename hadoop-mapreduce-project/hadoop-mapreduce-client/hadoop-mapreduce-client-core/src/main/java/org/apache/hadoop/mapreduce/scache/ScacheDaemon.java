@@ -20,14 +20,27 @@ public class ScacheDaemon {
 
     private static final Log LOG = LogFactory.getLog(ScacheDaemon.class.getName());
 
-    private static Daemon daemon = new Daemon("hadoop");
+    private static Daemon daemon = null;
 
-    public int registerShuffle(JobID jobId) {
+    private static ScacheDaemon instance = null;
+
+    protected ScacheDaemon() {
+       daemon = new Daemon("hadoop");
+    }
+
+    public static ScacheDaemon getInstance() {
+        if (instance == null) {
+            instance = new ScacheDaemon();
+        }
+        return instance;
+    }
+
+    public static int registerShuffle(JobID jobID) {
         int ret = shuffleId;
         synchronized (jobToId) {
-            if (!jobToId.containsKey(jobId)) {
-                jobToId.put(jobId, this.jobId);
-                this.jobId ++;
+            if (!jobToId.containsKey(jobID)) {
+                jobToId.put(jobID, jobId);
+                jobId ++;
             }
         }
         // synchronized (jobToShuffle){
@@ -41,7 +54,7 @@ public class ScacheDaemon {
     }
 
 
-    public void putBlock(JobID jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data) {
+    public static void putBlock(JobID jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data) {
         int numJID = jobToId.get(jobID);
         int numMID = Integer.parseInt(mapID.toString().split("_")[4]);
 

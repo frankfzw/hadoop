@@ -920,6 +920,8 @@ public class MapTask extends Task {
     private ByteArrayOutputStream[] rawBuffers;
     private ArrayList<ScacheMetaBuffer> metas;
 
+    public ScacheOutputBuffer (){}
+
     public void init(MapOutputCollector.Context context
                     ) throws IOException, ClassNotFoundException {
       job = context.getJobConf();
@@ -930,7 +932,7 @@ public class MapTask extends Task {
 
       comparator = job.getOutputKeyComparator();
       keyClass = (Class<K>)job.getMapOutputKeyClass();
-      valClass = (Class<V>)job.getReducerClass();
+      valClass = (Class<V>)job.getMapOutputValueClass();
       serializationFactory = new SerializationFactory(job);
       keySerializer = serializationFactory.getSerializer(keyClass);
       valSerializer = serializationFactory.getSerializer(valClass);
@@ -963,6 +965,7 @@ public class MapTask extends Task {
       }
 
       // buffers
+      metas = new ArrayList<>();
       buffers = new DataOutputStream[partitions];
       rawBuffers = new ByteArrayOutputStream[partitions];
       for (int i = 0; i < partitions; i ++) {
@@ -1005,15 +1008,21 @@ public class MapTask extends Task {
     }
     public void flush() throws IOException, ClassNotFoundException,
            InterruptedException {
+      long startTime = System.currentTimeMillis();
+      LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " starts flush of map output on " + startTime);
       // sort and merge
+      long size = 0;
       for (int i = 0; i < partitions; i ++) {
         byte[] bytes = rawBuffers[i].toByteArray();
         metas.get(i).setRaw(bytes);
         // sort this partition
-        sorter.sort(metas.get(i), 0, metas.get(i).getMetaSize());
+        if (metas.get(i).getMetaSize() > 0) {
+            LOG.info("frankfzw-debug: reduce parition " + i + " size " + metas.get(i).getMetaSize());
+          sorter.sort(metas.get(i), 0, metas.get(i).getMetaSize());
+        }
       }
       sortPhase.complete();
-      for (int i = 0; i < partitions; i ++) {
+      for (int i = 0; i < partitions && metas.get(i).getMetaSize() > 0; i ++) {
         ScacheKVIterator kvIter = new ScacheKVIterator(metas.get(i));
         // combine here
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -1030,8 +1039,12 @@ public class MapTask extends Task {
           combinerRunner.combine(kvIter, combineCollector);
         }
         // TODO send data to Scache
+        ScacheDaemon.getInstance().registerShuffle(mapTask.getJobID());
+        ScacheDaemon.getInstance().putBlock(mapTask.getJobID(), 0, mapTask.getTaskID(), i, bos.toByteArray());
+        size += bos.toByteArray().length;
       }
-
+      LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " shuffle write finished in " + (System.currentTimeMillis() - startTime) +
+              " ms with size: " + size);
     }
     public void close() throws IOException{
       for (int i = 0; i < partitions; i ++) {

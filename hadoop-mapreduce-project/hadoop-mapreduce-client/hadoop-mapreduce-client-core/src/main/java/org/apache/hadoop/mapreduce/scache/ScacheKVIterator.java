@@ -41,7 +41,7 @@ public class ScacheKVIterator implements RawKeyValueIterator {
     }
     public DataInputBuffer getValue() throws IOException {
         final int kvoff = (current * NMETA) % kvmeta.size();
-        keybuf.reset(rawData, kvmeta.get(kvoff + VALSTART), kvmeta.get(kvoff + VALLEN));
+        vbytes.reset(rawData, kvmeta.get(kvoff + VALSTART), kvmeta.get(kvoff + VALLEN));
         return vbytes;
     }
     public Progress getProgress() {
