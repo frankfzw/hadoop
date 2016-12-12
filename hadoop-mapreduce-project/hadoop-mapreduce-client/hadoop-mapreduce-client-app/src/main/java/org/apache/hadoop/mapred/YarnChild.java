@@ -39,6 +39,7 @@ import org.apache.hadoop.mapreduce.MRConfig;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskType;
 import org.apache.hadoop.mapreduce.counters.Limits;
+import org.apache.hadoop.mapreduce.scache.ScacheDaemon;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
 import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
@@ -158,6 +159,8 @@ class YarnChild {
       final Task taskFinal = task;
       LOG.info("frankfzw: " + "isMap: " + task.isMapTask() + " " + task.getJobID() + ":" + task.getTaskID()+ " initialized in "
               + (System.currentTimeMillis() - startTime) + " ms");
+      // init ScacheDaemon here
+      ScacheDaemon.initInstance(job.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
       childUGI.doAs(new PrivilegedExceptionAction<Object>() {
         @Override
         public Object run() throws Exception {

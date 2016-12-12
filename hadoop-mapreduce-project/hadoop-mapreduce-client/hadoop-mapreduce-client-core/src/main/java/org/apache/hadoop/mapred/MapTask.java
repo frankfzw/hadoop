@@ -1017,7 +1017,7 @@ public class MapTask extends Task {
         metas.get(i).setRaw(bytes);
         // sort this partition
         if (metas.get(i).getMetaSize() > 0) {
-            LOG.info("frankfzw-debug: reduce parition " + i + " size " + metas.get(i).getMetaSize());
+            // LOG.info("frankfzw-debug: reduce parition " + i + " size " + metas.get(i).getMetaSize());
           sorter.sort(metas.get(i), 0, metas.get(i).getMetaSize());
         }
       }
