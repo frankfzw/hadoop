@@ -47,7 +47,7 @@ public class ScacheDaemon {
             scacheConf = new ScacheConf(scacheHome);
             Thread t = new Thread() {
                 public void run() {
-                    LOG.info("Start Scache Daemon of hadoop with conf: " + scacheConf.scacheHome() + " on " + localIP);
+                    LOG.info("Start Scache Daemon of hadoop with conf: " + scacheConf.getHome() + " on " + localIP);
                     RpcEnv env = RpcEnv.create("hadoop_daemon", localIP, 12345, scacheConf, true);
                     RpcAddress clientRpcAddr = new RpcAddress(localIP, 5678);
                     clientRef = env.setupEndpointRef(clientRpcAddr, "Client");

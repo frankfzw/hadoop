@@ -58,7 +58,7 @@
     <java.security.egd>file:///dev/urandom</java.security.egd>
 
     <!-- avro version -->
-    <avro.version>1.7.4</avro.version>
+    <avro.version>1.7.7</avro.version>
 
     <!-- jersey version -->
     <jersey.version>1.9</jersey.version>
@@ -396,7 +396,7 @@
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
-        <version>11.0.2</version>
+        <version>17.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.code.gson</groupId>
@@ -568,13 +568,13 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty</artifactId>
-        <version>3.6.2.Final</version>
+        <version>3.8.0.Final</version>
       </dependency>
 
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.23.Final</version>
+        <version>4.0.29.Final</version>
       </dependency>
 
       <dependency>
