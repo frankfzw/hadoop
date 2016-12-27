@@ -31,6 +31,7 @@ public interface MRJobConfig {
   // Put all of the attribute names in here so that Job and JobContext are
   // consistent.
   public static final String SCACHE_HOME_DIR = "mapreduce.scache.home";
+  public static final String SCACHE_SHUFFLE_ID = "mapreduce.scache.shuffleId";
 
   public static final String INPUT_FORMAT_CLASS_ATTR = "mapreduce.job.inputformat.class";
 

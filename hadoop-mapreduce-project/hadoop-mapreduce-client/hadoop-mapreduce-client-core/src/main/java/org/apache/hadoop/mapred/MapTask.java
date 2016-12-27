@@ -1039,8 +1039,8 @@ public class MapTask extends Task {
           combinerRunner.combine(kvIter, combineCollector);
         }
         // TODO send data to Scache
-        ScacheDaemon.getInstance().registerShuffle(mapTask.getJobID());
-        ScacheDaemon.getInstance().putBlock(mapTask.getJobID(), 0, mapTask.getTaskID(), i, bos.toByteArray());
+        // ScacheDaemon.getInstance().registerShuffle(mapTask.getJobID());
+        ScacheDaemon.getInstance().putBlock(mapTask.getJobID().toString(), job.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), mapTask.getTaskID(), i, bos.toByteArray());
         size += bos.toByteArray().length;
       }
       LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " shuffle write finished in " + (System.currentTimeMillis() - startTime) +

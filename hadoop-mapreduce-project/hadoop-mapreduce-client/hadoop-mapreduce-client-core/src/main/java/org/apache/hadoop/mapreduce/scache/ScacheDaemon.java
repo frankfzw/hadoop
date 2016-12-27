@@ -1,6 +1,5 @@
 package org.apache.hadoop.mapreduce.scache;
 
-import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -10,6 +9,7 @@ import org.scache.rpc.RpcEndpointRef;
 import org.scache.rpc.RpcEnv;
 import org.scache.storage.ScacheBlockId;
 import org.scache.util.ScacheConf;
+import scala.reflect.ClassTag$;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +18,7 @@ import java.net.UnknownHostException;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -27,8 +28,6 @@ import java.util.List;
  */
 public class ScacheDaemon {
     private static int shuffleId = 0;
-    private static int jobId = 0;
-    private static HashMap<JobID, Integer> jobToId = new HashMap<>();
     private static HashMap<Integer, List<Integer>> jobToShuffle = new HashMap<>();
 
     private static final Log LOG = LogFactory.getLog(ScacheDaemon.class.getName());
@@ -37,25 +36,34 @@ public class ScacheDaemon {
     private static ScacheConf scacheConf = null;
     private static final Object lock = new Object();
     private static ScacheDaemon instance = null;
-    private static RpcEndpointRef clientRef = null;
+    private static volatile RpcEndpointRef clientRef = null;
     private static long tid = -1;
 
-    protected ScacheDaemon(String scacheHome) {
+    protected ScacheDaemon(final String scacheHome) {
         try {
             final String localIP = Inet4Address.getLocalHost().getHostAddress();
+            System.setProperty("SCACHE_DAEMON", "daemon-" + localIP);
             //LOG.info("frankfzw-debug: " + System.getenv("SCACHE_HOME"));
             scacheConf = new ScacheConf(scacheHome);
             Thread t = new Thread() {
                 public void run() {
+                    int clientPort = scacheConf.getInt("scache.client.port", 5678);
                     LOG.info("Start Scache Daemon of hadoop with conf: " + scacheConf.getHome() + " on " + localIP);
                     RpcEnv env = RpcEnv.create("hadoop_daemon", localIP, 12345, scacheConf, true);
-                    RpcAddress clientRpcAddr = new RpcAddress(localIP, 5678);
+                    RpcAddress clientRpcAddr = new RpcAddress(localIP, clientPort);
                     clientRef = env.setupEndpointRef(clientRpcAddr, "Client");
                     env.awaitTermination();
                 }
             };
             tid = t.getId();
             t.start();
+            while (clientRef == null) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    LOG.error("Init failed " + e.toString());
+                }
+            }
         } catch (UnknownHostException e) {
             LOG.error("Address not found\n");
         }
@@ -83,27 +91,34 @@ public class ScacheDaemon {
         return instance;
     }
 
-    public static int registerShuffle(JobID jobID) {
-        int ret = shuffleId;
-        synchronized (jobToId) {
-            if (!jobToId.containsKey(jobID)) {
-                jobToId.put(jobID, jobId);
-                jobId ++;
-            }
+    public static int registerShuffle(String jobID, int numMap, int numReduce) {
+        if (instance == null) {
+            LOG.error("Register Shuffle before INIT the ScacheDaemon \n");
+            return -1;
         }
-        // synchronized (jobToShuffle){
-        //     if (!jobToShuffle.containsKey(numId)) {
-        //         jobToShuffle.put(numId, new ArrayList<Integer>());
-        //     }
-        //     jobToShuffle.get(numId).add(shuffleId);
-        //     shuffleId ++;
-        // }
+        int ret = shuffleId;
+        int jid = Math.abs(jobID.hashCode());
+        synchronized (jobToShuffle) {
+            if (jobToShuffle.containsKey(jid)) {
+                jobToShuffle.get(jid).add(shuffleId);
+            } else {
+                ArrayList<Integer> shuffleIds = new ArrayList<>();
+                shuffleIds.add(shuffleId);
+                jobToShuffle.put(jid, shuffleIds);
+            }
+            shuffleId ++;
+        }
+        // register shuffle to scache
+        Boolean res = (Boolean) instance.clientRef.askWithRetry(new DeployMessages.RegisterShuffle("hadoop", jid, ret, numMap, numReduce),
+                ClassTag$.MODULE$.apply(Boolean.class));
+        LOG.info("Trying to register shuffle of Job " + jobID + ", get " + res.toString());
+
         return ret;
     }
 
 
-    public static void putBlock(JobID jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data) {
-        int numJID = jobToId.get(jobID);
+    public static void putBlock(String jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data) {
+        int numJID = Math.abs(jobID.hashCode());
         int numMID = Integer.parseInt(mapID.toString().split("_")[4]);
 
         ScacheBlockId blockId = new ScacheBlockId("hadoop", numJID, shuffleId, numMID, reduceId);
@@ -114,7 +129,7 @@ public class ScacheDaemon {
             FileChannel channel = FileChannel.open(f.toPath(), StandardOpenOption.READ, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
             MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, data.length);
             buf.put(data, 0, data.length);
-            clientRef.send(new DeployMessages.PutBlock(blockId, data.length));
+            instance.clientRef.send(new DeployMessages.PutBlock(blockId, data.length));
         } catch (IOException e) {
             LOG.error("File: " + f.toPath().toString() + " not found");
         }

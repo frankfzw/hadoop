@@ -65,6 +65,7 @@ import org.apache.hadoop.mapreduce.jobhistory.JobSubmittedEvent;
 import org.apache.hadoop.mapreduce.jobhistory.JobUnsuccessfulCompletionEvent;
 import org.apache.hadoop.mapreduce.lib.chain.ChainMapper;
 import org.apache.hadoop.mapreduce.lib.chain.ChainReducer;
+import org.apache.hadoop.mapreduce.scache.ScacheDaemon;
 import org.apache.hadoop.mapreduce.security.TokenCache;
 import org.apache.hadoop.mapreduce.security.token.JobTokenIdentifier;
 import org.apache.hadoop.mapreduce.security.token.JobTokenSecretManager;
@@ -1466,8 +1467,13 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
             job.conf.getInt(MRJobConfig.REDUCE_FAILURES_MAXPERCENT, 0);
 
         // create the Tasks but don't start them yet
+        ScacheDaemon.initInstance(job.conf.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
+        int shuffleId = ScacheDaemon.getInstance().registerShuffle(job.getID().toString(), job.numMapTasks, job.numReduceTasks);
+        // set shuffle id
+        job.conf.setInt(MRJobConfig.SCACHE_SHUFFLE_ID, shuffleId);
         createMapTasks(job, inputLength, taskSplitMetaInfo);
         createReduceTasks(job);
+
 
         job.metrics.endPreparingJob(job);
         return JobStateInternal.INITED;

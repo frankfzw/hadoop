@@ -159,7 +159,6 @@ class YarnChild {
       final Task taskFinal = task;
       LOG.info("frankfzw: " + "isMap: " + task.isMapTask() + " " + task.getJobID() + ":" + task.getTaskID()+ " initialized in "
               + (System.currentTimeMillis() - startTime) + " ms");
-      // init ScacheDaemon here
       ScacheDaemon.initInstance(job.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
       childUGI.doAs(new PrivilegedExceptionAction<Object>() {
         @Override
