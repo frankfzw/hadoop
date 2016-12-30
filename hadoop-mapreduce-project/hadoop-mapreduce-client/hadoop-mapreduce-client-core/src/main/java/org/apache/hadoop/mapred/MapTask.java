@@ -1000,7 +1000,6 @@ public class MapTask extends Task {
       valSerializer.open(buffers[partition]);
       valSerializer.serialize(value);
       int valLen = rawBuffers[partition].size() - keyStart - keyLen;
-      //TODO add meta here
       metas.get(partition).append(keyStart, keyLen, (keyStart + keyLen), valLen);
       mapOutputRecordCounter.increment(1);
       mapOutputByteCounter.increment((keyLen + valLen));
@@ -1023,6 +1022,7 @@ public class MapTask extends Task {
       }
       sortPhase.complete();
       for (int i = 0; i < partitions && metas.get(i).getMetaSize() > 0; i ++) {
+        // TODO handle empty block
         ScacheKVIterator kvIter = new ScacheKVIterator(metas.get(i));
         // combine here
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -1038,13 +1038,13 @@ public class MapTask extends Task {
           combineCollector.setWriter(writer);
           combinerRunner.combine(kvIter, combineCollector);
         }
-        // TODO send data to Scache
         // ScacheDaemon.getInstance().registerShuffle(mapTask.getJobID());
         ScacheDaemon.getInstance().putBlock(mapTask.getJobID().toString(), job.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), mapTask.getTaskID(), i, bos.toByteArray());
         size += bos.toByteArray().length;
       }
       LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " shuffle write finished in " + (System.currentTimeMillis() - startTime) +
               " ms with size: " + size);
+      ScacheDaemon.updateMapSize(mapTask.getTaskID(), size);
     }
     public void close() throws IOException{
       for (int i = 0; i < partitions; i ++) {
@@ -1052,6 +1052,7 @@ public class MapTask extends Task {
         rawBuffers[i].close();
       }
       // TODO send map finish to Scache
+      ScacheDaemon.mapEnd(mapTask.getJobID().toString(), job.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), mapTask.getTaskID());
     }
 
   }

@@ -60,6 +60,7 @@ import org.apache.hadoop.mapreduce.JobStatus;
 import org.apache.hadoop.mapreduce.MRConfig;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.lib.reduce.WrappedReducer;
+import org.apache.hadoop.mapreduce.scache.ScacheDaemon;
 import org.apache.hadoop.mapreduce.task.ReduceContextImpl;
 import org.apache.hadoop.yarn.util.ResourceCalculatorProcessTree;
 import org.apache.hadoop.net.NetUtils;
@@ -1139,6 +1140,9 @@ abstract public class Task implements Writable, Configurable {
     }
 
     if (isMapTask() && conf.getNumReduceTasks() > 0) {
+      if (conf.getStrings(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR)[0].equals(MapTask.ScacheOutputBuffer.class.toString())) {
+        return ScacheDaemon.getMapSize(taskId);
+      }
       try {
         Path mapOutput =  mapOutputFile.getOutputFile();
         FileSystem localFS = FileSystem.getLocal(conf);

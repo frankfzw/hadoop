@@ -21,6 +21,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -31,6 +32,7 @@ public class ScacheDaemon {
     private static HashMap<Integer, List<Integer>> jobToShuffle = new HashMap<>();
 
     private static final Log LOG = LogFactory.getLog(ScacheDaemon.class.getName());
+    private static ConcurrentHashMap<String, Long> mapSize = new ConcurrentHashMap<>();
 
 
     private static ScacheConf scacheConf = null;
@@ -93,7 +95,7 @@ public class ScacheDaemon {
 
     public static int registerShuffle(String jobID, int numMap, int numReduce) {
         if (instance == null) {
-            LOG.error("Register Shuffle before INIT the ScacheDaemon \n");
+            LOG.error("Use before INIT the ScacheDaemon \n");
             return -1;
         }
         int ret = shuffleId;
@@ -118,6 +120,10 @@ public class ScacheDaemon {
 
 
     public static void putBlock(String jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data) {
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            return;
+        }
         int numJID = Math.abs(jobID.hashCode());
         int numMID = Integer.parseInt(mapID.toString().split("_")[4]);
 
@@ -135,6 +141,43 @@ public class ScacheDaemon {
         }
         long endTime = System.currentTimeMillis();
         LOG.debug("Copy block " + blockId.toString() + " to Scache in " + (endTime - startTime) + " ms");
+
+    }
+
+    public static void updateMapSize(TaskAttemptID mapId, long size) {
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            return;
+        }
+        instance.mapSize.putIfAbsent(mapId.toString(), size);
+    }
+
+    public static long getMapSize(TaskAttemptID tId) {
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            return -1;
+        }
+        return instance.mapSize.get(tId.toString());
+    }
+
+    public static void mapEnd(String jobId, int shuffleId, TaskAttemptID mapId) {
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            return;
+        }
+        int numJID = Math.abs(jobId.hashCode());
+        int numMID = Integer.parseInt(mapId.toString().split("_")[4]);
+        instance.clientRef.send(new DeployMessages.MapEnd("hadoop", numJID, shuffleId, numMID));
+    }
+    public static void putEmptyBlock(String jobID, int shuffleId, TaskAttemptID mapID, int reduceId) {
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            return;
+        }
+        int numJID = Math.abs(jobID.hashCode());
+        int numMID = Integer.parseInt(mapID.toString().split("_")[4]);
+        ScacheBlockId blockId = new ScacheBlockId("hadoop", numJID, shuffleId, numMID, reduceId);
+        instance.clientRef.send(new DeployMessages.PutBlock(blockId, 0));
 
     }
 
