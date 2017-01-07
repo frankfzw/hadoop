@@ -1140,8 +1140,8 @@ abstract public class Task implements Writable, Configurable {
     }
 
     if (isMapTask() && conf.getNumReduceTasks() > 0) {
-      if (conf.getStrings(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR)[0].equals(MapTask.ScacheOutputBuffer.class.toString())) {
-        return ScacheDaemon.getMapSize(taskId);
+      if (conf.getStrings(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR)[0].equals(MapTask.ScacheOutputBuffer.class.getName())) {
+        return ScacheDaemon.getInstance().getMapSize(taskId);
       }
       try {
         Path mapOutput =  mapOutputFile.getOutputFile();

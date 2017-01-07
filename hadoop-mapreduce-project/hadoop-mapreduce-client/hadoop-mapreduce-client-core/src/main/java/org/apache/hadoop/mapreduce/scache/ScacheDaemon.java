@@ -4,6 +4,8 @@ import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.scache.deploy.DeployMessages;
+import org.scache.deploy.ReduceStatus;
+import org.scache.deploy.ShuffleStatus;
 import org.scache.rpc.RpcAddress;
 import org.scache.rpc.RpcEndpointRef;
 import org.scache.rpc.RpcEnv;
@@ -150,6 +152,28 @@ public class ScacheDaemon {
             return;
         }
         instance.mapSize.putIfAbsent(mapId.toString(), size);
+    }
+
+    public static List<List<String>> getShuffleStatus(String jobID) throws Exception{
+        int numJID = Math.abs(jobID.hashCode());
+        List<List<String>> ret = new ArrayList<List<String>>();
+        if (instance.jobToShuffle.containsKey(numJID)) {
+            int shuffleID = jobToShuffle.get(numJID).get(0);
+            ShuffleStatus res = (ShuffleStatus) instance.clientRef.askWithRetry(new DeployMessages.GetShuffleStatus("hadoop", numJID, shuffleID),
+                    ClassTag$.MODULE$.apply(ShuffleStatus.class));
+            for (ReduceStatus rs : res.reduceArray()) {
+                List<String> tmp = new ArrayList<>();
+                tmp.add(rs.host());
+                for (String backup : rs.backups()) {
+                    tmp.add(backup);
+                }
+                ret.add(tmp);
+            }
+            return ret;
+        } else {
+            LOG.error("Cannot find shuffle of job: " + jobID);
+            throw new Exception("Cannot find shuffle of job: " + jobID);
+        }
     }
 
     public static long getMapSize(TaskAttemptID tId) {

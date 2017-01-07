@@ -159,7 +159,17 @@ class YarnChild {
       final Task taskFinal = task;
       LOG.info("frankfzw: " + "isMap: " + task.isMapTask() + " " + task.getJobID() + ":" + task.getTaskID()+ " initialized in "
               + (System.currentTimeMillis() - startTime) + " ms");
-      ScacheDaemon.initInstance(job.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
+
+      String origin = job.get(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR, "WTF");
+      String weWant = MapTask.ScacheOutputBuffer.class.getName();
+      LOG.info("frankfzw: Config is " + origin + ", size: " + origin.length() + ", we want " +
+              MapTask.ScacheOutputBuffer.class.getName() + ", size: " + weWant.length() + "; compare result: " + origin.equals(weWant));
+
+
+      if (job.get(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR, "WTF").equals(MapTask.ScacheOutputBuffer.class.getName())) {
+        LOG.info("Start to initialize SCache Daemon");
+        ScacheDaemon.initInstance(job.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
+      }
       childUGI.doAs(new PrivilegedExceptionAction<Object>() {
         @Override
         public Object run() throws Exception {

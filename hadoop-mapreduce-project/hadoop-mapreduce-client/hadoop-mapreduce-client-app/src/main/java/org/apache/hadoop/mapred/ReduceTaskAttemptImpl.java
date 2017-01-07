@@ -49,6 +49,20 @@ public class ReduceTaskAttemptImpl extends TaskAttemptImpl {
     this.numMapTasks = numMapTasks;
   }
 
+  public ReduceTaskAttemptImpl(TaskId id, int attempt,
+      EventHandler eventHandler, Path jobFile, int partition,
+      int numMapTasks, JobConf conf,
+      String[] hosts,
+      TaskAttemptListener taskAttemptListener,
+      Token<JobTokenIdentifier> jobToken,
+      Credentials credentials, Clock clock,
+      AppContext appContext) {
+    super(id, attempt, eventHandler, taskAttemptListener, jobFile, partition,
+        conf, hosts, jobToken, credentials, clock,
+        appContext);
+    this.numMapTasks = numMapTasks;
+  }
+
   @Override
   public Task createRemoteTask() {
   //job file name is set in TaskAttempt, setting it null here

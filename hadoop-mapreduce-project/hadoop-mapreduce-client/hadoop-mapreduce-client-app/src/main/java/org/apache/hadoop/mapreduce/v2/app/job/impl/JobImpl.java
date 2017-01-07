@@ -48,6 +48,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobACLsManager;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.MapTask;
 import org.apache.hadoop.mapred.TaskCompletionEvent;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.JobACL;
@@ -1467,12 +1468,23 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
             job.conf.getInt(MRJobConfig.REDUCE_FAILURES_MAXPERCENT, 0);
 
         // create the Tasks but don't start them yet
-        ScacheDaemon.initInstance(job.conf.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
-        int shuffleId = ScacheDaemon.getInstance().registerShuffle(job.getID().toString(), job.numMapTasks, job.numReduceTasks);
-        // set shuffle id
-        job.conf.setInt(MRJobConfig.SCACHE_SHUFFLE_ID, shuffleId);
-        createMapTasks(job, inputLength, taskSplitMetaInfo);
-        createReduceTasks(job);
+        if (job.conf.get(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR, "WTF").equals(MapTask.ScacheOutputBuffer.class.getName())) {
+          ScacheDaemon.initInstance(job.conf.get(MRJobConfig.SCACHE_HOME_DIR, "WTF"));
+          // set shuffle id
+          int shuffleId = ScacheDaemon.getInstance().registerShuffle(job.getID().toString(), job.numMapTasks, job.numReduceTasks);
+          job.conf.setInt(MRJobConfig.SCACHE_SHUFFLE_ID, shuffleId);
+          try {
+            List<List<String>> ss = ScacheDaemon.getInstance().getShuffleStatus(job.getID().toString());
+            assert(ss.size() == job.numReduceTasks);
+            createMapTasks(job, inputLength, taskSplitMetaInfo);
+            createReduceTasksWithHosts(job, ss);
+          } catch (Exception e) {
+            LOG.error("Can't get shuffle status of " + job.getID() + " reason: " + e.toString());
+          }
+        } else {
+          createMapTasks(job, inputLength, taskSplitMetaInfo);
+          createReduceTasks(job);
+        }
 
 
         job.metrics.endPreparingJob(job);
@@ -1561,6 +1573,27 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
       }
       LOG.info("Number of reduces for job " + job.jobId + " = "
           + job.numReduceTasks);
+    }
+
+    private void createReduceTasksWithHosts(JobImpl job, List<List<String>> hostsList) {
+      for (int i = 0; i < job.numReduceTasks; i++) {
+        String[] tmp = new String[hostsList.get(i).size()];
+        for (int j = 0; j < hostsList.get(i).size(); j ++) {
+          tmp[j] = hostsList.get(i).get(j);
+        }
+        TaskImpl task =
+            new ReduceTaskImpl(job.jobId, i,
+                job.eventHandler,
+                job.remoteJobConfFile,
+                job.conf, tmp, job.numMapTasks,
+                job.taskAttemptListener, job.jobToken,
+                job.jobCredentials, job.clock,
+                job.applicationAttemptId.getAttemptId(),
+                job.metrics, job.appContext);
+        job.addTask(task);
+      }
+      LOG.info("Number of reduces for job " + job.jobId + " = "
+          + job.numReduceTasks + " with pre-allocated hosts");
     }
 
     protected TaskSplitMetaInfo[] createSplits(JobImpl job, JobId jobId) {

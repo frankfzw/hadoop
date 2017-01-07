@@ -37,6 +37,7 @@ import org.apache.hadoop.yarn.util.Clock;
 public class ReduceTaskImpl extends TaskImpl {
   
   private final int numMapTasks;
+  private final String[] hosts;
 
   public ReduceTaskImpl(JobId jobId, int partition,
       EventHandler eventHandler, Path jobFile, JobConf conf,
@@ -48,6 +49,21 @@ public class ReduceTaskImpl extends TaskImpl {
         taskAttemptListener, jobToken, credentials, clock,
         appAttemptId, metrics, appContext);
     this.numMapTasks = numMapTasks;
+    this.hosts = new String[] {};
+  }
+
+  public ReduceTaskImpl(JobId jobId, int partition,
+      EventHandler eventHandler, Path jobFile, JobConf conf,
+      String[] hosts,
+      int numMapTasks, TaskAttemptListener taskAttemptListener,
+      Token<JobTokenIdentifier> jobToken,
+      Credentials credentials, Clock clock,
+      int appAttemptId, MRAppMetrics metrics, AppContext appContext) {
+    super(jobId, TaskType.REDUCE, partition, eventHandler, jobFile, conf,
+        taskAttemptListener, jobToken, credentials, clock,
+        appAttemptId, metrics, appContext);
+    this.numMapTasks = numMapTasks;
+    this.hosts = hosts;
   }
 
   @Override
@@ -59,7 +75,7 @@ public class ReduceTaskImpl extends TaskImpl {
   protected TaskAttemptImpl createAttempt() {
     return new ReduceTaskAttemptImpl(getID(), nextAttemptNumber,
         eventHandler, jobFile,
-        partition, numMapTasks, conf, taskAttemptListener,
+        partition, numMapTasks, conf, hosts, taskAttemptListener,
         jobToken, credentials, clock, appContext);
   }
 
