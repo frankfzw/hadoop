@@ -890,6 +890,9 @@ public class RMContainerAllocator extends RMContainerRequestor
     /** Maps from a host to a list of Map tasks with data on the host */
     private final Map<String, LinkedList<TaskAttemptId>> mapsHostMapping = 
       new HashMap<String, LinkedList<TaskAttemptId>>();
+    /** Maps from a host to a list of Reduce tasks **/
+    private final Map<String, LinkedList<TaskAttemptId>> reducesHostMapping =
+      new HashMap<String, LinkedList<TaskAttemptId>>();
     private final Map<String, LinkedList<TaskAttemptId>> mapsRackMapping = 
       new HashMap<String, LinkedList<TaskAttemptId>>();
     @VisibleForTesting
@@ -964,6 +967,20 @@ public class RMContainerAllocator extends RMContainerRequestor
     
     
     void addReduce(ContainerRequest req) {
+      // frankfzw: add reduce hosts
+      if (req.hosts.length > 0) {
+        for (String h : req.hosts) {
+          LinkedList<TaskAttemptId> list = reducesHostMapping.get(h);
+          if (list == null) {
+            list = new LinkedList<>();
+            reducesHostMapping.put(h, list);
+          }
+          list.add(req.attemptID);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Added reduce attempt " + req.attemptID.toString() + " req to host " + h);
+          }
+        }
+      }
       reduces.put(req.attemptID, req);
       addContainerReq(req);
     }
@@ -1120,6 +1137,7 @@ public class RMContainerAllocator extends RMContainerRequestor
         
     private void assignContainers(List<Container> allocatedContainers) {
       Iterator<Container> it = allocatedContainers.iterator();
+      // TODO add locality for all request
       while (it.hasNext()) {
         Container allocated = it.next();
         ContainerRequest assigned = assignWithoutLocality(allocated);
@@ -1194,6 +1212,17 @@ public class RMContainerAllocator extends RMContainerRequestor
       ContainerRequest assigned = null;
       //try to assign to reduces if present
       if (assigned == null && reduces.size() > 0 && canAssignReduces()) {
+        String host = allocated.getNodeId().getHost();
+        LinkedList<TaskAttemptId> list = reducesHostMapping.get(host);
+        // Do we have pre-allocated reduces?
+        while (list != null && list.size() > 0) {
+          TaskAttemptId tid = list.removeFirst();
+          if (reduces.containsKey(tid)) {
+            assigned = reduces.remove(tid);
+            LOG.info("Assigned reduce " + tid.toString() + " based on pre-allocated host: " + host);
+            return assigned;
+          }
+        }
         TaskAttemptId tId = reduces.keySet().iterator().next();
         assigned = reduces.remove(tId);
         LOG.info("Assigned to reduce");
