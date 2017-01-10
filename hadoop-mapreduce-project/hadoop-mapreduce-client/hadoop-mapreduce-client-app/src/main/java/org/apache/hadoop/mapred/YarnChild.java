@@ -160,10 +160,10 @@ class YarnChild {
       LOG.info("frankfzw: " + "isMap: " + task.isMapTask() + " " + task.getJobID() + ":" + task.getTaskID()+ " initialized in "
               + (System.currentTimeMillis() - startTime) + " ms");
 
-      String origin = job.get(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR, "WTF");
-      String weWant = MapTask.ScacheOutputBuffer.class.getName();
-      LOG.info("frankfzw: Config is " + origin + ", size: " + origin.length() + ", we want " +
-              MapTask.ScacheOutputBuffer.class.getName() + ", size: " + weWant.length() + "; compare result: " + origin.equals(weWant));
+      // String origin = job.get(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR, "WTF");
+      // String weWant = MapTask.ScacheOutputBuffer.class.getName();
+      // LOG.info("frankfzw: Config is " + origin + ", size: " + origin.length() + ", we want " +
+      //         MapTask.ScacheOutputBuffer.class.getName() + ", size: " + weWant.length() + "; compare result: " + origin.equals(weWant));
 
 
       if (job.get(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR, "WTF").equals(MapTask.ScacheOutputBuffer.class.getName())) {
