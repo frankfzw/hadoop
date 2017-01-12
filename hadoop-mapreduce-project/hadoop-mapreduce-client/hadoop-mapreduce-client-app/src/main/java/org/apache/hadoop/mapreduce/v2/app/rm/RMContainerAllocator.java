@@ -46,6 +46,7 @@ import org.apache.hadoop.mapreduce.jobhistory.JobHistoryEvent;
 import org.apache.hadoop.mapreduce.jobhistory.NormalizedResourceEvent;
 import org.apache.hadoop.mapreduce.v2.api.records.JobId;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskAttemptId;
+import org.apache.hadoop.mapreduce.v2.api.records.TaskId;
 import org.apache.hadoop.mapreduce.v2.api.records.TaskType;
 import org.apache.hadoop.mapreduce.v2.app.AppContext;
 import org.apache.hadoop.mapreduce.v2.app.client.ClientService;
@@ -891,8 +892,10 @@ public class RMContainerAllocator extends RMContainerRequestor
     private final Map<String, LinkedList<TaskAttemptId>> mapsHostMapping = 
       new HashMap<String, LinkedList<TaskAttemptId>>();
     /** Maps from a host to a list of Reduce tasks **/
-    private final Map<String, LinkedList<TaskAttemptId>> reducesHostMapping =
-      new HashMap<String, LinkedList<TaskAttemptId>>();
+    private final Map<String, LinkedList<TaskId>> reducesPrimaryHostMapping =
+      new HashMap<String, LinkedList<TaskId>>();
+    private final Map<String, LinkedList<TaskId>> reducesBackUpHostMapping =
+      new HashMap<String, LinkedList<TaskId>>();
     private final Map<String, LinkedList<TaskAttemptId>> mapsRackMapping = 
       new HashMap<String, LinkedList<TaskAttemptId>>();
     @VisibleForTesting
@@ -901,6 +904,8 @@ public class RMContainerAllocator extends RMContainerRequestor
     
     private final LinkedHashMap<TaskAttemptId, ContainerRequest> reduces = 
       new LinkedHashMap<TaskAttemptId, ContainerRequest>();
+    private final LinkedHashMap<TaskId, ContainerRequest> reducesIndexedByTaskId =
+      new LinkedHashMap<TaskId, ContainerRequest>();
     
     boolean remove(TaskAttemptId tId) {
       ContainerRequest req = null;
@@ -908,6 +913,7 @@ public class RMContainerAllocator extends RMContainerRequestor
         req = maps.remove(tId);
       } else {
         req = reduces.remove(tId);
+        reducesIndexedByTaskId.remove(tId.getTaskId());
       }
       
       if (req == null) {
@@ -923,6 +929,7 @@ public class RMContainerAllocator extends RMContainerRequestor
       if (it.hasNext()) {
         Entry<TaskAttemptId, ContainerRequest> entry = it.next();
         it.remove();
+        reducesIndexedByTaskId.remove(entry.getKey().getTaskId());
         decContainerReq(entry.getValue());
         return entry.getValue();
       }
@@ -969,19 +976,36 @@ public class RMContainerAllocator extends RMContainerRequestor
     void addReduce(ContainerRequest req) {
       // frankfzw: add reduce hosts
       if (req.hosts.length > 0) {
-        for (String h : req.hosts) {
-          LinkedList<TaskAttemptId> list = reducesHostMapping.get(h);
-          if (list == null) {
-            list = new LinkedList<>();
-            reducesHostMapping.put(h, list);
+        // put primary at first
+        String primaryHost = req.hosts[0];
+        TaskId tid = req.attemptID.getTaskId();
+        LinkedList<TaskId> list = reducesPrimaryHostMapping.get(primaryHost);
+        if (list == null) {
+          list = new LinkedList<>();
+          reducesPrimaryHostMapping.put(primaryHost, list);
+        }
+        list.add(tid);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Added reduce attempt " + req.attemptID.getTaskId().toString() + " req to primary host " + primaryHost);
+        }
+        // put backups if it has
+        for (int i = 1; i < req.hosts.length; ++ i) {
+          LinkedList<TaskId> backups = reducesBackUpHostMapping.get(req.hosts[i]);
+          if (backups == null) {
+            backups = new LinkedList<>();
+            reducesBackUpHostMapping.put(req.hosts[i], backups);
           }
-          list.add(req.attemptID);
+          // it may failed at primary, so add if to avoid duplicate TaskId
+          if (!backups.contains(tid)) {
+            backups.add(req.attemptID.getTaskId());
+          }
           if (LOG.isDebugEnabled()) {
-            LOG.debug("Added reduce attempt " + req.attemptID.toString() + " req to host " + h);
+            LOG.debug("Added reduce attempt " + req.attemptID.getTaskId().toString() + " req to backup host " + req.hosts[i]);
           }
         }
       }
       reduces.put(req.attemptID, req);
+      reducesIndexedByTaskId.put(req.attemptID.getTaskId(), req);
       addContainerReq(req);
     }
     
@@ -1067,6 +1091,7 @@ public class RMContainerAllocator extends RMContainerRequestor
             }
             else {
               reduces.put(newReq.attemptID, newReq);
+              reducesIndexedByTaskId.put(newReq.attemptID.getTaskId(), newReq);
             }
             addContainerReq(newReq);
           }
@@ -1181,7 +1206,8 @@ public class RMContainerAllocator extends RMContainerRequestor
       }
       else if (PRIORITY_REDUCE.equals(priority)) {
         TaskAttemptId tId = reduces.keySet().iterator().next();
-        toBeReplaced = reduces.remove(tId);    
+        toBeReplaced = reduces.remove(tId);
+        reducesIndexedByTaskId.remove(tId.getTaskId());
       }
       LOG.info("Found replacement: " + toBeReplaced);
       return toBeReplaced;
@@ -1213,16 +1239,30 @@ public class RMContainerAllocator extends RMContainerRequestor
       //try to assign to reduces if present
       if (assigned == null && reduces.size() > 0 && canAssignReduces()) {
         String host = allocated.getNodeId().getHost();
-        LinkedList<TaskAttemptId> list = reducesHostMapping.get(host);
-        // Do we have pre-allocated reduces?
+        LinkedList<TaskId> list = reducesPrimaryHostMapping.get(host);
+        // Do we have pre-allocated reduce for primary?
         while (list != null && list.size() > 0) {
-          TaskAttemptId tid = list.removeFirst();
-          if (reduces.containsKey(tid)) {
-            assigned = reduces.remove(tid);
-            LOG.info("Assigned reduce " + tid.toString() + " based on pre-allocated host: " + host);
+          TaskId tid = list.removeFirst();
+          // if should always be true here
+          if (reducesIndexedByTaskId.containsKey(tid)) {
+            TaskAttemptId id = reducesIndexedByTaskId.remove(tid).attemptID;
+            assigned = reduces.remove(id);
+            LOG.info("Assigned reduce " + tid.toString() + " based on pre-allocated primary host: " + host);
             return assigned;
           }
         }
+        // check backup reduces
+        list = reducesBackUpHostMapping.get(host);
+        while (list != null && list.size() > 0) {
+          TaskId tid = list.removeFirst();
+          if (reducesIndexedByTaskId.containsKey(tid)) {
+            TaskAttemptId id = reducesIndexedByTaskId.remove(tid).attemptID;
+            assigned = reduces.remove(id);
+            LOG.info("Assigned reduce " + tid.toString() + " based on pre-allocated backup host: " + host);
+            return assigned;
+          }
+        }
+        // we don't havae pre-allocated reduce if we get here
         TaskAttemptId tId = reduces.keySet().iterator().next();
         assigned = reduces.remove(tId);
         LOG.info("Assigned to reduce");

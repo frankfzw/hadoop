@@ -29,6 +29,7 @@ public class ScacheShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
     private Progress copyPhase;
     private TaskStatus taskStatus;
     private Task reduceTask; //Used for status updates
+    private ShuffleScheduler<K, V> scheduler;
 
     @Override
     public synchronized void reportException(Throwable t) {
@@ -60,6 +61,10 @@ public class ScacheShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
                 context.getMergedMapOutputsCounter(), this, context.getMergePhase(),
                 context.getMapOutputFile());
 
+        this.scheduler = new ShuffleSchedulerImpl<K, V>(jobConf, taskStatus, reduceId,
+                this, copyPhase, context.getShuffledMapsCounter(),
+                context.getReduceShuffleBytes(), context.getFailedShuffleCounter());
+
     }
 
     @Override
@@ -67,7 +72,8 @@ public class ScacheShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, Excepti
         int numMapTask = jobConf.getNumMapTasks();
         ScacheFetcher<K, V>[] fetchers = new ScacheFetcher[numMapTask];
         for (int i = 0; i < numMapTask; ++i) {
-            fetchers[i] = new ScacheFetcher<>(jobConf, i, reduceId, merger, reporter, metrics, this, i);
+            String mapIdStr = String.format("attempt_%s_%d_m_%d_0", reduceTask.getJobID().getJtIdentifier(), reduceTask.getJobID().getId(), i);
+            fetchers[i] = new ScacheFetcher<>(jobConf, TaskAttemptID.forName(mapIdStr), reduceId, merger, reporter, metrics, this, i);
             fetchers[i].start();
         }
 

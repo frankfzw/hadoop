@@ -1456,7 +1456,9 @@ public abstract class TaskAttemptImpl implements
       taskAttempt.eventHandler.handle
           (new SpeculatorEvent(taskAttempt.getID().getTaskId(), +1));
       //request for container
-      if (rescheduled) {
+      // frankfzw: we should consider locality for reduces since we have backups
+      // only re-schedule map task without locality
+      if (rescheduled && (taskAttempt.getID().getTaskId().getTaskType() != TaskType.REDUCE)) {
         taskAttempt.eventHandler.handle(
             ContainerRequestEvent.createContainerRequestEventForFailedContainer(
                 taskAttempt.attemptId, 

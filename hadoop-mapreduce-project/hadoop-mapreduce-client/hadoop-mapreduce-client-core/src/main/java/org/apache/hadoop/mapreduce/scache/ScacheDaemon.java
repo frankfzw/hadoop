@@ -146,6 +146,42 @@ public class ScacheDaemon {
 
     }
 
+    public static byte[] getBlock(String jobId, int shuffleId, int mapId, int reduceId) {
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            return null;
+        }
+        int numJID = Math.abs(jobId.hashCode());
+        // if (jobToShuffle.containsKey(numJID)) {
+        //     shuffleId = jobToShuffle.get(numJID).get(0);
+        // } else {
+        //     LOG.error("Shuffle not registered of job " + jobId);
+        //     return null;
+        // }
+        ScacheBlockId blockId = new ScacheBlockId("hadoop", numJID, shuffleId, mapId, reduceId);
+        long startTime = System.currentTimeMillis();
+        int size = (Integer) instance.clientRef.askWithRetry(new DeployMessages.GetBlock(blockId), ClassTag$.MODULE$.apply(Integer.class));
+        if (size < 0) {
+            LOG.error("Can't get block " + blockId.toString());
+            return null;
+        }
+        LOG.debug("Start fetching block " + blockId.toString() + " with size " + size);
+        File f = new File(ScacheConf.scacheLocalDir() + "/" + blockId.toString());
+        byte[] bytes = new byte[size];
+        try {
+            FileChannel channel = FileChannel.open(f.toPath(),
+                    StandardOpenOption.READ, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.DELETE_ON_CLOSE);
+            MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, size);
+            buf.get(bytes);
+            channel.close();
+        } catch (IOException e) {
+            LOG.error("File: " + f.toPath().toString() + " not found");
+        }
+        long endTime = System.currentTimeMillis();
+        LOG.debug("Copy block " + blockId.toString() + " from Scache in " + (endTime - startTime) + " ms");
+        return bytes;
+    }
+
     public static void updateMapSize(TaskAttemptID mapId, long size) {
         if (instance == null) {
             LOG.error("Use before INIT the ScacheDaemon \n");
