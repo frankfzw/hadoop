@@ -130,6 +130,7 @@ public class ScacheDaemon {
         int numMID = Integer.parseInt(mapID.toString().split("_")[4]);
 
         ScacheBlockId blockId = new ScacheBlockId("hadoop", numJID, shuffleId, numMID, reduceId);
+        boolean res = false;
         LOG.debug("Start copying block " + blockId.toString() + " with size " + data.length);
         long startTime = System.currentTimeMillis();
         File f = new File(ScacheConf.scacheLocalDir() + "/" + blockId.toString());
@@ -137,12 +138,18 @@ public class ScacheDaemon {
             FileChannel channel = FileChannel.open(f.toPath(), StandardOpenOption.READ, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
             MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, data.length);
             buf.put(data, 0, data.length);
-            instance.clientRef.send(new DeployMessages.PutBlock(blockId, data.length));
+            res = (Boolean) instance.clientRef.askWithRetry(new DeployMessages.PutBlock(blockId, data.length),
+                    ClassTag$.MODULE$.apply(Boolean.class));
         } catch (IOException e) {
             LOG.error("File: " + f.toPath().toString() + " not found");
         }
         long endTime = System.currentTimeMillis();
-        LOG.debug("Copy block " + blockId.toString() + " to Scache in " + (endTime - startTime) + " ms");
+        if (res) {
+            LOG.debug("Copy block " + blockId.toString() + " to Scache successfully in " + (endTime - startTime) + " ms");
+        } else {
+            LOG.error("Copy block " + blockId.toString() + " to Scache failed in " + (endTime - startTime) + " ms");
+        }
+
 
     }
 

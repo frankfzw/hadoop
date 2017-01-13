@@ -50,8 +50,8 @@ public class ScacheFetcher<K, V> extends Thread {
         byte[] bytes = ScacheDaemon.getInstance().getBlock(reduceId.getJobID().toString(),
                 conf.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), numMapId, numReduceId);
         if (bytes == null) {
-            LOG.error("Can't fetch reduce block " + reduceId.getJobID().toString() + ":" + numMapId + ":" + numReduceId + " from SCache");
-            exceptionReporter.reportException(new Throwable("Can't fetch reduce block " + reduceId.getJobID().toString() + ":" + mapId + ":" + numReduceId + " from SCache"));
+            LOG.error("Can't fetch reduce block " + reduceId.getJobID().toString() + "_" + numMapId + "_" + numReduceId + " from SCache");
+            exceptionReporter.reportException(new Throwable("Can't fetch reduce block " + reduceId.getJobID().toString() + "_" + numMapId + "_" + numReduceId + " from SCache"));
             return;
         }
         MapOutput<K, V> mapOutput = null;
