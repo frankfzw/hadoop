@@ -121,7 +121,7 @@ public class ScacheDaemon {
     }
 
 
-    public static void putBlock(String jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data) {
+    public static void putBlock(String jobID, int shuffleId, TaskAttemptID mapID, int reduceId, byte[] data, long rawLen, long compressedLen) {
         if (instance == null) {
             LOG.error("Use before INIT the ScacheDaemon \n");
             return;
@@ -136,9 +136,12 @@ public class ScacheDaemon {
         File f = new File(ScacheConf.scacheLocalDir() + "/" + blockId.toString());
         try {
             FileChannel channel = FileChannel.open(f.toPath(), StandardOpenOption.READ, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-            MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, data.length);
-            buf.put(data, 0, data.length);
-            res = (Boolean) instance.clientRef.askWithRetry(new DeployMessages.PutBlock(blockId, data.length),
+            int blockLen = 2 * Long.SIZE / Byte.SIZE + data.length;
+            MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, blockLen);
+            buf.putLong(rawLen);
+            buf.putLong(compressedLen);
+            buf.put(data);
+            res = (Boolean) instance.clientRef.askWithRetry(new DeployMessages.PutBlock(blockId, blockLen),
                     ClassTag$.MODULE$.apply(Boolean.class));
         } catch (IOException e) {
             LOG.error("File: " + f.toPath().toString() + " not found");
@@ -153,7 +156,7 @@ public class ScacheDaemon {
 
     }
 
-    public static byte[] getBlock(String jobId, int shuffleId, int mapId, int reduceId) {
+    public static BlockFromScache getBlock(String jobId, int shuffleId, int mapId, int reduceId) {
         if (instance == null) {
             LOG.error("Use before INIT the ScacheDaemon \n");
             return null;
@@ -175,10 +178,14 @@ public class ScacheDaemon {
         LOG.debug("Start fetching block " + blockId.toString() + " with size " + size);
         File f = new File(ScacheConf.scacheLocalDir() + "/" + blockId.toString());
         byte[] bytes = new byte[size];
+        long rawSize = 0L;
+        long compressedSize = 0L;
         try {
             FileChannel channel = FileChannel.open(f.toPath(),
                     StandardOpenOption.READ, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.DELETE_ON_CLOSE);
             MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, size);
+            rawSize = buf.getLong();
+            compressedSize = buf.getLong();
             buf.get(bytes);
             channel.close();
         } catch (IOException e) {
@@ -186,7 +193,8 @@ public class ScacheDaemon {
         }
         long endTime = System.currentTimeMillis();
         LOG.debug("Copy block " + blockId.toString() + " from Scache in " + (endTime - startTime) + " ms");
-        return bytes;
+        BlockFromScache block = new BlockFromScache(rawSize, compressedSize, bytes);
+        return block;
     }
 
     public static void updateMapSize(TaskAttemptID mapId, long size) {

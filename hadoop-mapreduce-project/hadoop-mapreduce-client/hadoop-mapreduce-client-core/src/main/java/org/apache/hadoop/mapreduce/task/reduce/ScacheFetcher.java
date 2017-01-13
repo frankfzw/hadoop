@@ -2,11 +2,14 @@ package org.apache.hadoop.mapreduce.task.reduce;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.CryptoUtils;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.mapreduce.scache.BlockFromScache;
 import org.apache.hadoop.mapreduce.scache.ScacheDaemon;
 
 import java.io.ByteArrayInputStream;
@@ -28,6 +31,8 @@ public class ScacheFetcher<K, V> extends Thread {
     private ExceptionReporter exceptionReporter;
     private int id;
 
+    private static final MapHost LOCALHOST = new MapHost("local", "local");
+
     public ScacheFetcher(JobConf conf, TaskAttemptID mapId, TaskAttemptID reduceId,
                          MergeManager<K, V> merger, Reporter reporter, ShuffleClientMetrics metrics,
                          ExceptionReporter exceptionReporter, int id) {
@@ -47,28 +52,31 @@ public class ScacheFetcher<K, V> extends Thread {
         //TODO fetch data from scache
         int numReduceId = Integer.parseInt(reduceId.toString().split("_")[4]);
         int numMapId = Integer.parseInt(mapId.toString().split("_")[4]);
-        byte[] bytes = ScacheDaemon.getInstance().getBlock(reduceId.getJobID().toString(),
+        BlockFromScache sBlock = ScacheDaemon.getInstance().getBlock(reduceId.getJobID().toString(),
                 conf.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), numMapId, numReduceId);
-        if (bytes == null) {
+        if (sBlock == null) {
             LOG.error("Can't fetch reduce block " + reduceId.getJobID().toString() + "_" + numMapId + "_" + numReduceId + " from SCache");
             exceptionReporter.reportException(new Throwable("Can't fetch reduce block " + reduceId.getJobID().toString() + "_" + numMapId + "_" + numReduceId + " from SCache"));
             return;
         }
         MapOutput<K, V> mapOutput = null;
         try {
-            int length = bytes.length;
+            long compressedLength = sBlock.compressedSize;
+            long decompressedLength = sBlock.rawSize;
+
+            compressedLength -= CryptoUtils.cryptoPadding(conf);
+            decompressedLength -= CryptoUtils.cryptoPadding(conf);
             merger.waitForResource();
-            ByteArrayInputStream bos = new ByteArrayInputStream(bytes);
+            ByteArrayInputStream bos = new ByteArrayInputStream(sBlock.buf);
             InputStream input = new DataInputStream(bos);
-            input = CryptoUtils.wrapIfNecessary(conf, input, length);
-            length -= CryptoUtils.cryptoPadding(conf);
-            mapOutput = merger.reserve(mapId, bytes.length, id);
+            FSDataInputStream inStream = new FSDataInputStream(input);
+            inStream = CryptoUtils.wrapIfNecessary(conf, inStream);
+            mapOutput = merger.reserve(mapId, decompressedLength, id);
             if (mapOutput == null) {
                 LOG.error("fetcher#" + id + "- MergerManager is not available");
                 return;
             }
-            MapHost localHost = new MapHost("localhost", "localhost");
-            mapOutput.shuffle(localHost, input, length, length, metrics, reporter);
+            mapOutput.shuffle(LOCALHOST, inStream, compressedLength, decompressedLength, metrics, reporter);
             metrics.successFetch();
         } catch (InterruptedException ie) {
             return;

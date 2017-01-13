@@ -1038,9 +1038,13 @@ public class MapTask extends Task {
           combineCollector.setWriter(writer);
           combinerRunner.combine(kvIter, combineCollector);
         }
+        // TODO add compressed length and decompressed length in the head of buffer
+        writer.close();
         // ScacheDaemon.getInstance().registerShuffle(mapTask.getJobID());
-        ScacheDaemon.getInstance().putBlock(mapTask.getJobID().toString(), job.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), mapTask.getTaskID(), i, bos.toByteArray());
-        size += bos.toByteArray().length;
+        ScacheDaemon.getInstance().putBlock(mapTask.getJobID().toString(), job.getInt(MRJobConfig.SCACHE_SHUFFLE_ID, 0), mapTask.getTaskID(), i,
+                bos.toByteArray(), writer.getRawLength(), writer.getCompressedLength());
+        // size += bos.toByteArray().length;
+        size += writer.getCompressedLength();
       }
       LOG.info("frankfzw: " + mapTask.getJobID() + ":" + mapTask.getTaskID() + " shuffle write finished in " + (System.currentTimeMillis() - startTime) +
               " ms with size: " + size);
