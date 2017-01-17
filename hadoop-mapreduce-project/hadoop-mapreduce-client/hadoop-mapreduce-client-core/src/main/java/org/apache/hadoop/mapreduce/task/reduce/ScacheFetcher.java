@@ -69,14 +69,13 @@ public class ScacheFetcher<K, V> extends Thread {
             merger.waitForResource();
             ByteArrayInputStream bos = new ByteArrayInputStream(sBlock.buf);
             InputStream input = new DataInputStream(bos);
-            FSDataInputStream inStream = new FSDataInputStream(input);
-            inStream = CryptoUtils.wrapIfNecessary(conf, inStream);
+            input = CryptoUtils.wrapIfNecessary(conf, input, compressedLength);
             mapOutput = merger.reserve(mapId, decompressedLength, id);
             if (mapOutput == null) {
                 LOG.error("fetcher#" + id + "- MergerManager is not available");
                 return;
             }
-            mapOutput.shuffle(LOCALHOST, inStream, compressedLength, decompressedLength, metrics, reporter);
+            mapOutput.shuffle(LOCALHOST, input, compressedLength, decompressedLength, metrics, reporter);
             metrics.successFetch();
         } catch (InterruptedException ie) {
             return;

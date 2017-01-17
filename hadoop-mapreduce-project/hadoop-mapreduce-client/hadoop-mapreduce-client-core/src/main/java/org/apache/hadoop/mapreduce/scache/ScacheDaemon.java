@@ -177,7 +177,6 @@ public class ScacheDaemon {
         }
         LOG.debug("Start fetching block " + blockId.toString() + " with size " + size);
         File f = new File(ScacheConf.scacheLocalDir() + "/" + blockId.toString());
-        byte[] bytes = new byte[size];
         long rawSize = 0L;
         long compressedSize = 0L;
         try {
@@ -186,15 +185,18 @@ public class ScacheDaemon {
             MappedByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, size);
             rawSize = buf.getLong();
             compressedSize = buf.getLong();
+            byte[] bytes = new byte[size - 2 * Long.SIZE / Byte.SIZE];
             buf.get(bytes);
             channel.close();
+            long endTime = System.currentTimeMillis();
+            LOG.debug("Copy block " + blockId.toString() + " from Scache in " + (endTime - startTime) + " ms");
+            BlockFromScache block = new BlockFromScache(rawSize, compressedSize, bytes);
+            return block;
         } catch (IOException e) {
             LOG.error("File: " + f.toPath().toString() + " not found");
+            return null;
         }
-        long endTime = System.currentTimeMillis();
-        LOG.debug("Copy block " + blockId.toString() + " from Scache in " + (endTime - startTime) + " ms");
-        BlockFromScache block = new BlockFromScache(rawSize, compressedSize, bytes);
-        return block;
+
     }
 
     public static void updateMapSize(TaskAttemptID mapId, long size) {
@@ -205,9 +207,9 @@ public class ScacheDaemon {
         instance.mapSize.putIfAbsent(mapId.toString(), size);
     }
 
-    public static List<List<String>> getShuffleStatus(String jobID) throws Exception{
+    public static HashMap<Integer, List<String>> getShuffleStatus(String jobID) throws Exception{
         int numJID = Math.abs(jobID.hashCode());
-        List<List<String>> ret = new ArrayList<List<String>>();
+        HashMap<Integer, List<String>> ret = new HashMap<>();
         if (instance.jobToShuffle.containsKey(numJID)) {
             int shuffleID = jobToShuffle.get(numJID).get(0);
             ShuffleStatus res = (ShuffleStatus) instance.clientRef.askWithRetry(new DeployMessages.GetShuffleStatus("hadoop", numJID, shuffleID),
@@ -218,7 +220,7 @@ public class ScacheDaemon {
                 for (String backup : rs.backups()) {
                     tmp.add(backup);
                 }
-                ret.add(tmp);
+                ret.put(rs.id(), tmp);
             }
             return ret;
         } else {

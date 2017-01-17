@@ -1474,8 +1474,8 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
           int shuffleId = ScacheDaemon.getInstance().registerShuffle(job.getID().toString(), job.numMapTasks, job.numReduceTasks);
           job.conf.setInt(MRJobConfig.SCACHE_SHUFFLE_ID, shuffleId);
           try {
-            List<List<String>> ss = ScacheDaemon.getInstance().getShuffleStatus(job.getID().toString());
-            assert(ss.size() == job.numReduceTasks);
+            HashMap<Integer, List<String>> ss = ScacheDaemon.getInstance().getShuffleStatus(job.getID().toString());
+            assert(ss.keySet().size() == job.numReduceTasks);
             createMapTasks(job, inputLength, taskSplitMetaInfo);
             createReduceTasksWithHosts(job, ss);
           } catch (Exception e) {
@@ -1575,7 +1575,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
           + job.numReduceTasks);
     }
 
-    private void createReduceTasksWithHosts(JobImpl job, List<List<String>> hostsList) {
+    private void createReduceTasksWithHosts(JobImpl job, HashMap<Integer, List<String>> hostsList) {
       for (int i = 0; i < job.numReduceTasks; i++) {
         String[] tmp = new String[hostsList.get(i).size()];
         for (int j = 0; j < hostsList.get(i).size(); j ++) {
