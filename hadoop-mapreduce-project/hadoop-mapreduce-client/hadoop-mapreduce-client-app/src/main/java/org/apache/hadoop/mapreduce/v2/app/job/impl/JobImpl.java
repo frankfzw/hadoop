@@ -1474,7 +1474,7 @@ public class JobImpl implements org.apache.hadoop.mapreduce.v2.app.job.Job,
           int shuffleId = ScacheDaemon.getInstance().registerShuffle(job.getID().toString(), job.numMapTasks, job.numReduceTasks);
           job.conf.setInt(MRJobConfig.SCACHE_SHUFFLE_ID, shuffleId);
           try {
-            HashMap<Integer, List<String>> ss = ScacheDaemon.getInstance().getShuffleStatus(job.getID().toString());
+            HashMap<Integer, List<String>> ss = ScacheDaemon.getInstance().getShuffleStatus(job.getID().toString(), shuffleId);
             assert(ss.keySet().size() == job.numReduceTasks);
             createMapTasks(job, inputLength, taskSplitMetaInfo);
             createReduceTasksWithHosts(job, ss);

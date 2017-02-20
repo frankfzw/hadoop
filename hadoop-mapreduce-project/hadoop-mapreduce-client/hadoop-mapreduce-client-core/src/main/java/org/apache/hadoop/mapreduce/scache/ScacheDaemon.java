@@ -22,6 +22,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -42,17 +43,23 @@ public class ScacheDaemon {
     private static ScacheDaemon instance = null;
     private static volatile RpcEndpointRef clientRef = null;
     private static long tid = -1;
+    private static ConcurrentHashMap<String, ShuffleStatus> shuffleStatus = new ConcurrentHashMap<>();
+    private static HashSet<String> shuffleStatusFetchQueue = new HashSet<>();
+
+    private static String hostname = "";
+    private static String localIP = "";
 
     protected ScacheDaemon(final String scacheHome) {
         try {
-            final String localIP = Inet4Address.getLocalHost().getHostAddress();
-            System.setProperty("SCACHE_DAEMON", "daemon-" + localIP);
+            localIP = Inet4Address.getLocalHost().getHostAddress();
+            hostname = Inet4Address.getLocalHost().getHostName();
+            System.setProperty("SCACHE_DAEMON", "daemon-" + hostname);
             //LOG.info("frankfzw-debug: " + System.getenv("SCACHE_HOME"));
             scacheConf = new ScacheConf(scacheHome);
             Thread t = new Thread() {
                 public void run() {
                     int clientPort = scacheConf.getInt("scache.client.port", 5678);
-                    LOG.info("Start Scache Daemon of hadoop with conf: " + scacheConf.getHome() + " on " + localIP);
+                    LOG.info("Start Scache Daemon of hadoop with conf: " + scacheConf.getHome() + " on " + hostname);
                     RpcEnv env = RpcEnv.create("hadoop_daemon", localIP, 12345, scacheConf, true);
                     RpcAddress clientRpcAddr = new RpcAddress(localIP, clientPort);
                     clientRef = env.setupEndpointRef(clientRpcAddr, "Client");
@@ -162,13 +169,23 @@ public class ScacheDaemon {
             return null;
         }
         int numJID = Math.abs(jobId.hashCode());
-        // if (jobToShuffle.containsKey(numJID)) {
-        //     shuffleId = jobToShuffle.get(numJID).get(0);
-        // } else {
-        //     LOG.error("Shuffle not registered of job " + jobId);
-        //     return null;
-        // }
         ScacheBlockId blockId = new ScacheBlockId("hadoop", numJID, shuffleId, mapId, reduceId);
+        try {
+            HashMap<Integer, List<String>> shuffleStatus = getShuffleStatus(jobId, shuffleId);
+            if (!shuffleStatus.get(reduceId).contains(localIP)) {
+                String hosts = "";
+                for (String h : shuffleStatus.get(reduceId)) {
+                    hosts = hosts + " " + h;
+                }
+                LOG.error("Host "+ localIP + " Receive wrong block fetch request from " + blockId.toString()
+                + " reduce should run on " + hosts);
+                return null;
+            }
+        } catch (Exception e) {
+            LOG.error("Fetch shuffle statuses wrong in getBlock");
+            return null;
+        }
+
         long startTime = System.currentTimeMillis();
         int size = (Integer) instance.clientRef.askWithRetry(new DeployMessages.GetBlock(blockId), ClassTag$.MODULE$.apply(Integer.class));
         if (size < 0) {
@@ -207,26 +224,53 @@ public class ScacheDaemon {
         instance.mapSize.putIfAbsent(mapId.toString(), size);
     }
 
-    public static HashMap<Integer, List<String>> getShuffleStatus(String jobID) throws Exception{
+    public static HashMap<Integer, List<String>> getShuffleStatus(String jobID, int shuffleId) throws Exception{
+        if (instance == null) {
+            LOG.error("Use before INIT the ScacheDaemon \n");
+            throw new Exception("Use before INIT the ScacheDaemon \n");
+        }
         int numJID = Math.abs(jobID.hashCode());
         HashMap<Integer, List<String>> ret = new HashMap<>();
-        if (instance.jobToShuffle.containsKey(numJID)) {
-            int shuffleID = jobToShuffle.get(numJID).get(0);
-            ShuffleStatus res = (ShuffleStatus) instance.clientRef.askWithRetry(new DeployMessages.GetShuffleStatus("hadoop", numJID, shuffleID),
-                    ClassTag$.MODULE$.apply(ShuffleStatus.class));
-            for (ReduceStatus rs : res.reduceArray()) {
-                List<String> tmp = new ArrayList<>();
-                tmp.add(rs.host());
-                for (String backup : rs.backups()) {
-                    tmp.add(backup);
-                }
-                ret.put(rs.id(), tmp);
-            }
-            return ret;
+
+        String shuffleIndex = Integer.toString(numJID) + "_" + Integer.toString(shuffleId);
+
+        ShuffleStatus res;
+        if (instance.shuffleStatus.containsKey(shuffleIndex)) {
+            res = instance.shuffleStatus.get(shuffleIndex);
         } else {
-            LOG.error("Cannot find shuffle of job: " + jobID);
-            throw new Exception("Cannot find shuffle of job: " + jobID);
+            synchronized (instance.shuffleStatusFetchQueue) {
+                if (instance.shuffleStatusFetchQueue.contains(shuffleIndex)) {
+                    while (!instance.shuffleStatus.containsKey(shuffleIndex)) {
+                        instance.shuffleStatusFetchQueue.wait();
+                    }
+                } else {
+                    if (!instance.shuffleStatus.containsKey(shuffleIndex)) {
+                        instance.shuffleStatusFetchQueue.add(shuffleIndex);
+                    }
+                }
+            }
+            if (instance.shuffleStatus.containsKey(shuffleIndex)) {
+                res = instance.shuffleStatus.get(shuffleIndex);
+            } else {
+                res = (ShuffleStatus) instance.clientRef.askWithRetry(new DeployMessages.GetShuffleStatus("hadoop", numJID, shuffleId),
+                        ClassTag$.MODULE$.apply(ShuffleStatus.class));
+                instance.shuffleStatus.putIfAbsent(shuffleIndex, res);
+                synchronized (instance.shuffleStatusFetchQueue) {
+                    instance.shuffleStatusFetchQueue.remove(shuffleIndex);
+                    instance.shuffleStatusFetchQueue.notifyAll();
+                }
+            }
         }
+
+        for (ReduceStatus rs : res.reduceArray()) {
+            List<String> tmp = new ArrayList<>();
+            tmp.add(rs.host());
+            for (String backup : rs.backups()) {
+                tmp.add(backup);
+            }
+            ret.put(rs.id(), tmp);
+        }
+        return ret;
     }
 
     public static long getMapSize(TaskAttemptID tId) {
