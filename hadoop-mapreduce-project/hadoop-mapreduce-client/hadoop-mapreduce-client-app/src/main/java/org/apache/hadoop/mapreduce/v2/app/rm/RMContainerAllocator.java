@@ -1242,6 +1242,9 @@ public class RMContainerAllocator extends RMContainerRequestor
         String host = allocated.getNodeId().getHost();
         if (getConfig().getStrings(MRJobConfig.MAP_OUTPUT_COLLECTOR_CLASS_ATTR)[0].equals(MapTask.ScacheOutputBuffer.class.getName())) {
           LinkedList<TaskId> list = reducesPrimaryHostMapping.get(host);
+          for (Map.Entry<String, LinkedList<TaskId>> entry : reducesPrimaryHostMapping.entrySet()) {
+            LOG.debug("Host mapping list: " + entry.getKey() + " : " + entry.getValue().size());
+          }
           // Do we have pre-allocated reduce for primary?
           while (list != null && list.size() > 0) {
             TaskId tid = list.removeFirst();
@@ -1251,6 +1254,8 @@ public class RMContainerAllocator extends RMContainerRequestor
               assigned = reduces.remove(id);
               LOG.info("Assigned reduce " + assigned.toString() + " based on pre-allocated primary host: " + host);
               return assigned;
+            } else {
+              LOG.error("Assigned reduce tid: " + tid + "to " + host + "failed, cannot find corresponding TA_ID");
             }
           }
           // check backup reduces
@@ -1262,6 +1267,8 @@ public class RMContainerAllocator extends RMContainerRequestor
               assigned = reduces.remove(id);
               LOG.info("Assigned reduce " + assigned.toString() + " based on pre-allocated backup host: " + host);
               return assigned;
+            } else {
+              LOG.error("Assigned reduce tid: " + tid + "to " + host + "failed, cannot find corresponding TA_ID");
             }
           }
         } else {

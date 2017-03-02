@@ -792,7 +792,7 @@ public class MapTask extends Task {
 
     try {
       long startTime = System.currentTimeMillis();
-      LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " map compute starts on " + startTime);
+      LOG.info("frankfzw: " + getJobID() + ":" + getTaskID() + " map compute starts on " + startTime + " with split: " + split);
       input.initialize(split, mapperContext);
       mapper.run(mapperContext);
       mapPhase.complete();
@@ -2052,6 +2052,8 @@ public class MapTask extends Task {
             rec.startOffset = segmentStart;
             rec.rawLength = writer.getRawLength() + CryptoUtils.cryptoPadding(job);
             rec.partLength = writer.getCompressedLength() + CryptoUtils.cryptoPadding(job);
+            LOG.info("frankfzw: JobId: " + mapId.getJobID() + " MapId: " + mapId + " ReduceId: " + i
+                + " Size: " + rec.partLength);
             sr.putIndex(rec, i);
           }
           sr.writeToFile(finalIndexFile, job);
@@ -2120,6 +2122,8 @@ public class MapTask extends Task {
           rec.startOffset = segmentStart;
           rec.rawLength = writer.getRawLength() + CryptoUtils.cryptoPadding(job);
           rec.partLength = writer.getCompressedLength() + CryptoUtils.cryptoPadding(job);
+          LOG.info("frankfzw: JobId: " + mapId.getJobID() + " MapId: " + mapId + " ReduceId: " + parts
+                + " Size: " + rec.partLength);
           spillRec.putIndex(rec, parts);
         }
         spillRec.writeToFile(finalIndexFile, job);
